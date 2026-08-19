@@ -1,0 +1,248 @@
+@import "tailwindcss";
+
+:root {
+  --milq-black: #000000;
+  --milq-white: #ffffff;
+  --milq-cream: #f4f4f1;
+  --milq-charcoal: #3d3d3d;
+
+  --background: var(--milq-white);
+  --foreground: var(--milq-black);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+a {
+  color: var(--milq-black);
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------------------------ */
+/* Proposal layout classes — see docs/proposal-classes.md              */
+/* Fluid type/spacing throughout: mobile is the default, larger        */
+/* viewports get more breathing room via the min-width query at the    */
+/* bottom rather than a mobile override.                               */
+/* ------------------------------------------------------------------ */
+
+.milq-proposal-body {
+  max-width: 46rem;
+  margin-inline: auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+.milq-proposal-body :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 700;
+  line-height: 1.25;
+  margin-block: 2rem 0.75rem;
+}
+
+.milq-proposal-body p {
+  margin-block: 0 1rem;
+}
+
+.milq-proposal-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-block: 1.5rem;
+}
+
+.milq-proposal-body th,
+.milq-proposal-body td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--milq-cream);
+}
+
+.milq-proposal-body tbody tr:nth-child(even) {
+  background: var(--milq-cream);
+}
+
+.milq-proposal-body thead {
+  display: table-header-group;
+}
+
+.milq-cover {
+  background: var(--milq-cream);
+  padding: 2.5rem 1.5rem;
+  margin-inline: -1.25rem;
+  margin-block-end: 2rem;
+  text-align: left;
+}
+
+.milq-cover h1 {
+  font-size: clamp(1.75rem, 5vw, 2.75rem);
+  margin: 0;
+}
+
+.milq-lede {
+  font-size: 1.15rem;
+  color: var(--milq-charcoal);
+  max-width: 40rem;
+}
+
+.milq-stat {
+  display: block;
+  font-size: clamp(2rem, 8vw, 3.5rem);
+  font-weight: 700;
+  line-height: 1;
+  margin-block: 1.5rem;
+}
+
+.milq-pricing-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+
+.milq-pricing-card {
+  border: 1px solid var(--milq-cream);
+  background: var(--milq-white);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  break-inside: avoid;
+}
+
+.milq-pricing-card--recommended {
+  border: 2px solid var(--milq-black);
+}
+
+/* All fees are quoted exclusive of GST (2026 T&Cs, "Fees"). The shell renders this next to every
+   total rather than trusting proposal copy to repeat it consistently. */
+.milq-pricing-card::after {
+  content: "Excludes GST";
+  display: block;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--milq-charcoal);
+}
+
+.milq-scope-group {
+  background: var(--milq-cream);
+  border-radius: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  margin-block: 1.5rem;
+}
+
+.milq-process-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-block: 1.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.milq-testimonial {
+  border-left: 3px solid var(--milq-black);
+  padding-left: 1.25rem;
+  margin-block: 1.5rem;
+  font-style: italic;
+  color: var(--milq-charcoal);
+}
+
+.milq-terms {
+  background: var(--milq-cream);
+  border-radius: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  font-size: 0.9rem;
+  color: var(--milq-charcoal);
+  margin-block: 1.5rem;
+  break-inside: avoid;
+}
+
+.milq-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .milq-proposal-body {
+    padding-inline: 2rem;
+  }
+
+  .milq-cover {
+    margin-inline: -2rem;
+    padding: 3.5rem 2rem;
+  }
+
+  .milq-pricing-grid {
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  }
+
+  .milq-process-strip {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .milq-process-strip > * {
+    flex: 1 1 10rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Print                                                                */
+/* ------------------------------------------------------------------ */
+
+.no-print {
+  /* applied to nav, the export button, and the live signature form */
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  html,
+  body {
+    background: var(--milq-white);
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .milq-proposal-body {
+    max-width: none;
+    padding: 0;
+  }
+
+  .milq-cover {
+    margin-inline: 0;
+  }
+
+  .milq-pricing-card,
+  .milq-terms,
+  .milq-proposal-body table,
+  .signature-panel {
+    break-inside: avoid;
+  }
+
+  .milq-proposal-body thead {
+    display: table-header-group;
+  }
+
+  .print-footer {
+    display: block;
+  }
+}
+
+.print-footer {
+  display: none;
+}
