@@ -55,6 +55,25 @@ body {
   margin-block: 0 1rem;
 }
 
+/* Tailwind's Preflight resets ul/ol to list-style: none with no padding — restore normal bullet
+   list rendering for proposal copy. .milq-process-strip opts back out (see below); it's a step
+   strip, not a bulleted list. */
+.milq-proposal-body ul {
+  list-style: disc;
+  padding-inline-start: 1.25rem;
+  margin-block: 1rem;
+}
+
+.milq-proposal-body ol:not(.milq-process-strip) {
+  list-style: decimal;
+  padding-inline-start: 1.25rem;
+  margin-block: 1rem;
+}
+
+.milq-proposal-body li:not(.milq-process-strip > li) {
+  margin-block: 0.35rem;
+}
+
 .milq-proposal-body table {
   width: 100%;
   border-collapse: collapse;
