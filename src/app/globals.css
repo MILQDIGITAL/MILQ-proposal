@@ -23,7 +23,11 @@ body {
   line-height: 1.6;
 }
 
-a {
+/* Default link styling for proposal body copy only — chrome (nav, buttons) sets its own
+   colour via Tailwind utilities, which a global unlayered `a` rule would otherwise beat
+   regardless of specificity (Tailwind's utilities live inside `@layer utilities`, and any
+   unlayered rule always wins over a layered one). */
+.milq-proposal-body a {
   color: var(--milq-black);
   text-decoration: underline;
 }

@@ -46,13 +46,13 @@ export default async function AdminPage({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--milq-cream)] text-left">
-              <th className="py-2">Client</th>
-              <th className="py-2">Title</th>
-              <th className="py-2">Stream</th>
-              <th className="py-2">Owner</th>
-              <th className="py-2">Value</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Link</th>
+              <th className="py-2 pr-4">Client</th>
+              <th className="py-2 pr-4">Title</th>
+              <th className="py-2 pr-4">Stream</th>
+              <th className="py-2 pr-4">Owner</th>
+              <th className="py-2 pr-4">Value</th>
+              <th className="py-2 pr-4">Status</th>
+              <th className="py-2 pr-4">Link</th>
             </tr>
           </thead>
           <tbody>
@@ -61,17 +61,17 @@ export default async function AdminPage({
                 key={proposal.id}
                 className="border-b border-[var(--milq-cream)]"
               >
-                <td className="py-2">{proposal.client_company}</td>
-                <td className="py-2">{proposal.title}</td>
-                <td className="py-2">{proposal.stream}</td>
-                <td className="py-2">{proposal.owner_email}</td>
-                <td className="py-2">
+                <td className="py-2 pr-4">{proposal.client_company}</td>
+                <td className="py-2 pr-4">{proposal.title}</td>
+                <td className="py-2 pr-4">{proposal.stream}</td>
+                <td className="py-2 pr-4">{proposal.owner_email}</td>
+                <td className="py-2 pr-4">
                   {proposal.value_aud
                     ? `$${Number(proposal.value_aud).toLocaleString("en-AU")}`
                     : "—"}
                 </td>
-                <td className="py-2">{proposal.status}</td>
-                <td className="py-2">
+                <td className="py-2 pr-4">{proposal.status}</td>
+                <td className="py-2 pr-4">
                   <Link
                     href={`/p/${proposal.slug}`}
                     target="_blank"

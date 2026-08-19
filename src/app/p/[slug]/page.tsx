@@ -47,7 +47,9 @@ export default async function ProposalPage({
         <h1 className="text-lg font-semibold">This proposal has expired</h1>
         <p className="text-sm text-[var(--milq-charcoal)]">
           Contact{" "}
-          <a href={`mailto:${proposal.owner_email}`}>{proposal.owner_email}</a>{" "}
+          <a href={`mailto:${proposal.owner_email}`} className="underline">
+            {proposal.owner_email}
+          </a>{" "}
           for an updated version.
         </p>
       </main>
