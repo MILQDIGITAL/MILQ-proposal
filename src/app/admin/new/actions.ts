@@ -22,8 +22,13 @@ export async function createProposalAction(formData: FormData) {
   const title = requireString(formData, "title");
   const stream = requireString(formData, "stream") as ProposalStream;
   const owner_email = requireString(formData, "owner_email");
-  const content_html = requireString(formData, "content_html");
   const terms_version = requireString(formData, "terms_version");
+
+  const file = formData.get("content_file");
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Choose an HTML file to upload.");
+  }
+  const content_html = await file.text();
 
   if (!STREAMS.includes(stream)) {
     throw new Error(`Invalid stream: ${stream}`);
@@ -33,7 +38,7 @@ export async function createProposalAction(formData: FormData) {
   }
   if (content_html.includes("[[TBC]]")) {
     throw new Error(
-      "content_html still contains a [[TBC]] placeholder — resolve it before publishing."
+      "The uploaded file still contains a [[TBC]] placeholder — resolve it before publishing."
     );
   }
 

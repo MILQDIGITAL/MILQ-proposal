@@ -5,11 +5,16 @@ export default function NewProposalPage() {
     <main className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="mb-6 text-lg font-semibold">New proposal (draft)</h1>
       <p className="mb-6 text-sm text-[var(--milq-charcoal)]">
-        Manual paste-in for phase 1. Paste the sanitised HTML fragment the
-        `milq-proposal` skill produces — see docs/proposal-classes.md for the
-        allowed classes. This form is a stand-in for the publish API (phase 3).
+        Upload the complete, self-contained HTML file drafted in Claude chat or
+        by the `milq-proposal` skill — its own styling and scripts are stored
+        and served exactly as uploaded (BUILD_SPEC.md §3). This form is a
+        stand-in for the publish API (phase 3).
       </p>
-      <form action={createProposalAction} className="flex flex-col gap-4">
+      <form
+        action={createProposalAction}
+        encType="multipart/form-data"
+        className="flex flex-col gap-4"
+      >
         <label className="flex flex-col gap-1 text-sm">
           Client name
           <input
@@ -96,13 +101,13 @@ export default function NewProposalPage() {
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          Content HTML fragment
-          <textarea
-            name="content_html"
+          Proposal HTML file
+          <input
+            name="content_file"
+            type="file"
+            accept=".html,text/html"
             required
-            rows={16}
-            className="rounded border border-[var(--milq-charcoal)] px-3 py-2 font-mono text-xs"
-            placeholder='<section class="milq-cover">...</section>'
+            className="rounded border border-[var(--milq-charcoal)] px-3 py-2"
           />
         </label>
         <button
