@@ -14,8 +14,9 @@ Today proposals are drafted by the `milq-proposal` skill as markdown blocks, the
 hand into a duplicated Qwilr template. That is two systems, a manual transfer step, and a theme
 carrying a retired brand colour.
 
-This app collapses it. The skill drafts and publishes in one run. The client gets a branded URL.
-They sign in-page. The proposal locks and produces an audit trail.
+This app collapses it. The proposal is drafted as a complete HTML file — in a Claude chat, or by
+the skill — and uploaded as-is. The client gets a branded URL. They sign in-page. The proposal
+locks and produces an audit trail.
 
 **In scope:** hosting, admin directory, signature capture, locking, audit trail, PDF export.
 
@@ -33,7 +34,8 @@ multi-signer flows, client comments, MILQ countersignature, HubSpot sync.
 | Storage | Supabase Storage | PDF snapshots, signature images |
 | Auth (admin) | Supabase Auth, email domain restricted to `@milqdigital.co` | Team-only admin directory |
 | Auth (publish API) | Static bearer token, create-scoped | Called from the Claude sandbox by the skill |
-| PDF (client) | Print stylesheet plus `window.print()` | Zero infra, always available |
+| PDF (primary) | Whatever the uploaded file itself does for print/export | Most well-built artifacts already have this — see §9 |
+| PDF (fallback) | A host-injected `window.print()` button, always present | Guarantees an export path exists even if the artifact has none |
 | PDF (archival) | Headless Chromium on a Vercel function | Deterministic snapshot at signing |
 
 Use a **new Supabase project**, not a shared one. Signed commercial documents should not share a
@@ -44,29 +46,38 @@ below for admin auth and `owner_email`.
 
 ---
 
-## 3. Content model: the app owns the chrome
+## 3. Content model: the artifact owns everything except signing
 
-The skill emits a **body fragment**, not a full HTML document. The app wraps it in a shell that
-supplies brand CSS, the signature block, the print stylesheet and the responsive rules.
+**Revised from the original fragment-and-sanitiser design — see §13.10 for why.** The upload is
+a complete, self-contained HTML document (its own `<style>`, `<script>`, fonts, images,
+responsive rules, print behaviour), stored and served **verbatim**. There is no sanitiser, no
+fixed class vocabulary, no "the app supplies the CSS" model. `docs/proposal-classes.md` from the
+earlier design is retired.
 
-This is the single most important structural decision in the build. It means requirement 3
-(mobile friendly from the outset) is solved once in the shell rather than re-solved in every
-proposal, and a template fix retro-applies to every proposal already published.
+The host's only involvement in the page's content is a single string splice at serve time: a
+small, host-authored widget (markup + inline styles + script, never anything from the upload) is
+inserted immediately before `</body>`. This is what §7 (signing) and §9 (PDF fallback) attach to.
+The artifact needs **zero cooperation** for this — no placeholder element, no reserved container —
+the host always appends after everything else.
 
-The fragment is sanitised on ingest. Allowed tags: headings, paragraphs, lists, tables, `img`,
-`a`, `strong`, `em`, `blockquote`, `hr`, `section`, `div`, `span`. Allowed attributes: `class`,
-`href`, `src`, `alt`, `colspan`, `rowspan`. Strip everything else, including all inline styles,
-`script`, `style`, `iframe` and event handlers.
+**The one real constraint on the artifact:** don't use the `milq-host-` prefix for any id or
+class. That prefix is reserved for the injected widget, to keep its DOM/CSS namespace from
+colliding with the artifact's own.
 
-The fragment may use a fixed set of MILQ layout classes. Document these in
-`docs/proposal-classes.md` and keep the skill and the shell in sync:
+### Trust model
 
-```
-.milq-cover          .milq-lede           .milq-stat
-.milq-pricing-grid   .milq-pricing-card    .milq-pricing-card--recommended
-.milq-scope-group    .milq-process-strip   .milq-testimonial
-.milq-terms          .milq-team-card
-```
+This removes the sanitiser's XSS backstop, which only makes sense given who authors the content:
+MILQ staff, drafting in a Claude chat, not an external or adversarial third party. The realistic
+failure mode is an accidental CSS/JS clash with the injected widget, not a deliberate attack. The
+widget is built defensively against that: a single namespaced root id, inline styles rather than
+a stylesheet that could be overridden, `position: fixed`, a high `z-index`, and `!important` on
+the handful of properties that matter. It was verified empirically (see the commit history around
+this decision) that a real, JS-heavy artifact renders and behaves identically whether served
+standalone or through the app.
+
+If this pipeline ever needs to accept content from outside the team, revisit this: the escalation
+path is isolating the widget in an `<iframe>` for genuine DOM/CSS isolation, at the cost of more
+plumbing (postMessage for height, no longer a plain DOM append).
 
 ---
 
@@ -84,7 +95,7 @@ create table proposals (
   value_aud         numeric,
   status            text not null default 'draft'
                     check (status in ('draft','sent','viewed','signed','expired','archived')),
-  content_html      text not null,          -- sanitised body fragment
+  content_html      text not null,          -- the uploaded HTML file, verbatim, full document
   content_hash      text not null,          -- sha256 of content_html
   terms_version     text not null,
   version           int not null default 1,
@@ -132,6 +143,9 @@ create unique index one_signature_per_proposal on signatures(proposal_id);
 create index events_by_proposal on proposal_events(proposal_id, occurred_at);
 ```
 
+No schema change was needed for the §3 pivot — `content_html` simply holds a full document
+instead of a fragment now; every other column means what it always meant.
+
 RLS on all three tables. The public proposal route reads through a service role in a server
 component, never a client-side anon query. Nothing about a proposal should be reachable from the
 browser except the slug it was given.
@@ -151,6 +165,7 @@ a later phase.
 | `/admin/[id]` | Detail, audit trail, signature record | As above |
 | `/api/proposals` | Publish endpoint (POST) | Bearer token |
 | `/api/proposals/[slug]` | Update (PATCH), 409 if signed | Bearer token |
+| `/api/proposals/[slug]/sign` | Signature capture (POST) | Public — this is the client-facing signing action |
 
 **Slug:** `nanoid(24)` from a URL-safe alphabet. At 24 characters this is not enumerable by any
 practical means, which is the same posture Qwilr takes.
@@ -168,6 +183,12 @@ an external store), not an in-memory counter.
 expired, contact [owner]" state rather than the content. Signing is disabled. Already-signed
 proposals ignore expiry and always render.
 
+`/p/[slug]` is a route handler, not a React page, because it sometimes needs to return a raw,
+foreign HTML document verbatim (plus the injected widget) rather than JSX rendered inside the
+app's own `<html>`/`<body>`. The passcode gate, expired notice, and 404 states are small
+self-contained HTML responses built directly in the handler for the same reason — they can't
+share the root layout either, since the "real content" branch of the same route can't.
+
 ---
 
 ## 6. Publish API (requirement 1)
@@ -184,7 +205,7 @@ Content-Type: application/json
   "stream":         "project",
   "owner_email":    "cam@milqdigital.co",
   "value_aud":      71000,
-  "content_html":   "<section class=\"milq-cover\">...</section>",
+  "content_html":   "<!DOCTYPE html><html>...full, self-contained document...</html>",
   "terms_version":  "2026",
   "expires_in_days": 30,
   "passcode":       null
@@ -198,6 +219,10 @@ Content-Type: application/json
   "status":    "draft"
 }
 ```
+
+`content_html` is the entire uploaded file as a string. The admin UI's equivalent is a plain file
+upload (see §11) rather than a paste-in box, since these documents run well past what's
+comfortable in a textarea.
 
 `PATCH /api/proposals/[slug]` updates content on an unsigned proposal. If `signed_at` is not
 null it returns **409 Conflict** with a message directing the caller to publish a new version.
@@ -219,7 +244,7 @@ is not on it by default.
 **Preferred:** as MILQ org owner, add `proposal.milqdigital.co` to the org network allowlist in
 Claude settings. One entry, and the direct POST above works.
 
-**Fallback if that is not possible:** the skill commits the fragment plus a metadata JSON file to
+**Fallback if that is not possible:** the skill commits the file plus a metadata JSON file to
 a private GitHub repo (`github.com` and `api.github.com` are already allowlisted). A GitHub
 Actions workflow or a Vercel deploy hook then calls the publish API server-side. Slower and more
 moving parts, so only take this path if the allowlist route is blocked.
@@ -233,7 +258,8 @@ path can be swapped in without touching the skill's calling code.
 
 ### Capture
 
-Rendered by the shell at the foot of every unsigned proposal. Fields:
+Rendered by the host-injected widget (§3), spliced into the served HTML just before `</body>` of
+every unsigned proposal. Fields:
 
 | Field | Type | Required |
 |---|---|---|
@@ -248,6 +274,10 @@ Date is captured server-side. Never trust a client-supplied timestamp.
 
 The drawn signature uses pointer events so it works with finger, stylus and mouse. Canvas at
 device pixel ratio so it is not blurry on retina. Export as PNG at a fixed 600x200 logical size.
+
+The terms panel (expandable, logs a `terms_viewed` event when opened) lives inside the widget's
+modal, same as everything else in this section — none of it depends on or touches the uploaded
+document.
 
 ### On submit
 
@@ -272,13 +302,11 @@ Once `signed_at` is set:
   wrong later.
 - The public route still renders the full proposal, read-only. This is requirement 4 and it
   matters: the client must be able to return to what they signed at any time.
-- The signature block is replaced by an executed panel showing signer name, role, company, the
+- The widget swaps from the signing CTA to an executed panel: signer name, role, company, the
   signature image or typed mark, and the timestamp rendered in `Australia/Sydney` with the
   offset shown, for example `14 August 2026 at 3:42 pm AEST`.
 - Below it, an audit trail summary (see below).
-- A "Download signed PDF" button replaces the plain export button, available immediately —
-  the client-side print stylesheet already renders the executed panel and audit trail (§9), so
-  this download is available the moment they sign, with no wait on any archival job.
+- The widget's fallback "Download PDF" button (§9) remains available in both states.
 
 ### Revising a signed proposal
 
@@ -290,7 +318,8 @@ Say this plainly in the skill output so nobody expects an edit-in-place.
 
 ### Audit trail summary
 
-Rendered on the locked proposal and in admin. Plain language, timestamped, `Australia/Sydney`:
+Rendered on the locked proposal (inside the widget) and in admin. Plain language, timestamped,
+`Australia/Sydney`:
 
 ```
 Proposal published            12 Aug 2026, 9:14 am AEST
@@ -347,7 +376,7 @@ them entering the Agreement, and you are collecting a role/title field anyway.
 | 17.10 | Online execution is framed around a **third party** execution service. This app is first-party. Flag to the lawyer, see §14. |
 | 17.1 | Amendment only by written instrument executed by the Parties. Confirms the no-unlock, new-version design in this section. |
 | Definitions, "Proposal" | The hosted page **is** the Proposal, a schedule to the Agreement. This is why hashing and locking are load-bearing rather than nice to have. |
-| Definitions, "Fees" | All fees are quoted **exclusive of GST**. The shell must render an "excludes GST" line adjacent to every total. Do not leave this to proposal copy. |
+| Definitions, "Fees" | All fees are quoted **exclusive of GST**. Since the platform no longer controls the document's own markup (§3), this is now the *author's* responsibility to state clearly in the artifact itself, not something the host injects automatically. |
 | 8.2 | Where the Proposal specifies no payment date, the default is 30 days, not 14. See §11. |
 | Definitions, "Commencement Date" | Defined as when the *last Party* signs. With no MILQ countersignature step in this app, this app captures only the client signature — see §14 for the legal implication. |
 
@@ -366,25 +395,27 @@ Fire and forget, retried, never blocking the signature response.
 
 ## 9. PDF export (requirement 6)
 
-Two mechanisms, deliberately.
+**Revised from the original single-print-stylesheet design.** Since the platform no longer owns
+the document's markup or CSS, it can't unilaterally impose a print stylesheet on it either. Two
+independent layers instead:
 
-**Client-side, always available, signed or not.** A print stylesheet plus a button calling
-`window.print()`. This must be built regardless because it is also how the archival render works.
+**Layer 1 — the artifact's own.** A well-built upload may already have its own print handling
+(print-specific CSS, a "Save as PDF" button, `beforeprint`/`afterprint` listeners). Leave it alone
+entirely — it's part of the document, verified to work unmodified (§3's trust model).
 
-Print CSS requirements:
-- `@page { size: A4; margin: 18mm 16mm; }`
-- Hide nav, the export button, and the live signature form
-- `break-inside: avoid` on pricing cards, tables and the signature panel
-- Force backgrounds with `print-color-adjust: exact` so the cream fills survive
-- Repeat table headers with `thead { display: table-header-group; }`
-- Running footer with client company, proposal title and page number
-- When signed, print the executed panel and the audit trail summary
+**Layer 2 — the host's fallback, always present.** The injected widget (§3) includes its own
+"Download PDF" button, self-styled and calling `window.print()`, independent of whatever the
+artifact does or doesn't have. Its own inline `@media print` rules guarantee the executed panel
+and audit trail actually appear in print output regardless of the artifact's print CSS —
+important, since that CSS was authored with no knowledge the widget would ever exist.
 
-**Server-side, for the archival snapshot.** Same page rendered by Chromium at signing time.
-Deterministic output regardless of the client's browser, which is what you want on the document
-you may one day need to rely on.
+There is no host-wide `@page`/print stylesheet requirement placed on every proposal anymore; an
+author who wants tight print control (page size, running footers, `break-inside`) builds it into
+the file, the same as everything else about how the document looks.
 
-Ship the print stylesheet in phase 1. Add the server render in phase 4.
+**Server-side, for the archival snapshot.** Same page rendered by Chromium at signing time,
+deterministic output regardless of the client's own browser — this part is unchanged and still
+Phase 4.
 
 ---
 
@@ -421,15 +452,18 @@ publish path alongside it.
 
 ### New §3b: Publish
 
-After the markdown file is written and the §8 checklist passes:
+After the file is drafted and the §8 checklist passes:
 
-1. Render the approved blocks into the HTML fragment using the layout classes in
-   `references/proposal-html.md` (new file, mirrors `docs/proposal-classes.md` in the app repo).
-2. Refuse to publish while any `[[TBC]]` placeholder remains in the copy. List them and stop.
+1. Produce **one complete, self-contained HTML file** — its own styling, fonts, responsive rules
+   and any interactivity, with no external JS dependencies beyond Google Fonts. There is no fixed
+   layout-class vocabulary to target anymore (§3) — design it however the proposal calls for.
+2. Don't use the `milq-host-` id/class prefix anywhere in the file — reserved for the platform's
+   injected signing widget (§3).
+3. Refuse to publish while any `[[TBC]]` placeholder remains in the copy. List them and stop.
    A placeholder reaching a client URL is worse than one reaching a Qwilr draft, because the URL
    may already have been shared.
-3. POST to the publish endpoint.
-4. Report back the client URL and the admin URL. Do not paste the fragment into chat.
+4. POST the file to the publish endpoint.
+5. Report back the client URL and the admin URL. Do not paste the file into chat.
 
 ### Also update
 
@@ -439,37 +473,40 @@ After the markdown file is written and the §8 checklist passes:
   it **mandatory rather than standard**. Clause 8.2 of the 2026 terms defaults to 30 days where the
   Proposal is silent. A proposal that drops the terms block silently doubles MILQ's payment window.
   The skill should refuse to publish without it.
-- §5 GST: the existing line covers this in prose. The shell also renders an "excludes GST" line
-  against every total, so check the two do not read as duplicated on the page.
+- §5 GST: now entirely the file's own responsibility to state clearly against every total (§7's
+  clause table) — the platform no longer injects this automatically.
 - §8 checklist: add `[ ] Published, client URL returned` and `[ ] No [[TBC]] placeholders remain`.
-- §8 known template issue: the Qwilr purple note becomes conditional. On the hosted path the
-  shell uses brand tokens only, so it does not apply. Keep the note for proposals still going
-  through Qwilr.
+- §8 known template issue: the Qwilr purple note becomes conditional. On the hosted path there is
+  no shell imposing brand tokens, so this is now down to whatever palette the file itself uses —
+  keep it on-brand by eye, same as any other client-facing document. Keep the note for proposals
+  still going through Qwilr.
 
-### Brand tokens for the shell
+### Brand tokens
 
 From `milq-brand` §6. Black `#000000`, White `#ffffff`, Cream `#f4f4f1`, Charcoal `#3d3d3d`.
 No purple anywhere. Inter for all text via Google Fonts. Anton only for the wordmark, and the
-wordmark is an asset file, never styled text.
+wordmark is an asset file, never styled text. These are guidance for what the file itself should
+look like — the platform no longer enforces them structurally.
 
 ---
 
 ## 12. Build order
 
-**Phase 1 — Render.** Supabase schema, Next.js app, `/p/[slug]` shell with brand CSS and
-responsive rules, print stylesheet, manual paste-in through a temporary admin form. At the end of
-this phase you can host a proposal and a client can read it on a phone and print it.
+**Phase 1 — Render.** Supabase schema, Next.js app, `/p/[slug]` serving an uploaded file, manual
+upload through a temporary admin form. Done — later revised in place from a sanitised-fragment
+model to raw-file hosting (§13.10) once real test content showed the fragment model silently
+dropped JS-rendered content.
 
-**Phase 2 — Sign and lock.** Signature capture, server-side transaction, database lock trigger,
-executed panel, audit trail summary, event logging, versioned terms. At the end of this phase a
-client can sign and immediately download a PDF of the executed proposal, signature and audit
-trail via the print stylesheet.
+**Phase 2 — Sign and lock (current).** The host-injected signing widget, server-side signature
+transaction, database lock trigger, executed panel, audit trail summary, event logging, versioned
+terms. At the end of this phase a client can sign an uploaded proposal and immediately export a
+PDF of the executed document via the widget's fallback button.
 
-**Phase 3 — Publish and admin.** Publish API, token auth, HTML sanitiser, skill integration,
-admin directory and detail views, Supabase Auth with domain restriction.
+**Phase 3 — Publish and admin.** Publish API, token auth, skill integration, admin directory and
+detail views, Supabase Auth with domain restriction.
 
-**Phase 4 — Snapshot and notify.** Server-side Chromium PDF (deterministic archival duplicate of
-the phase 2 print output), Supabase Storage, Slack ping, confirmation email.
+**Phase 4 — Snapshot and notify.** Server-side Chromium PDF (deterministic archival duplicate),
+Supabase Storage, Slack ping, confirmation email.
 
 **Phase 5 — Analytics.** View beacons, dwell time per section, open counts in the admin list.
 
@@ -497,13 +534,25 @@ Phases 1 and 2 are the product. Everything after is leverage.
    computation — `signed_at` is the commencement date. See §14 for the legal caveat this raises
    against the 2026 T&Cs' Commencement Date definition.
 7. **No HubSpot sync.** Not in scope for v1 or a later phase. No deal reference on the schema.
+8. **Content model: raw-file hosting, not sanitised fragments.** Testing the original fragment
+   sanitiser against a real, richly-built proposal (a JS-driven Gantt timeline, an animated
+   canvas, a one-page-summary modal) showed the entire timeline section — real proposal content —
+   rendered completely blank, because it existed only as JavaScript-generated markup the
+   sanitiser correctly never executes. Loosening the sanitiser's allowlist wouldn't have fixed
+   that; the content simply never existed as static HTML. Serving the same file unmodified through
+   a plain static server, verified with a real browser, preserved every feature: the Gantt chart,
+   the canvas animation, the modal, the mobile breakpoint, the print handling. See §3.
+9. **Trust model.** Sanitisation is replaced by the fact that this content is authored by MILQ
+   staff (via Claude chat), not third parties, plus a defensively-built injected widget (§3) for
+   the one piece that must stay trustworthy regardless — signing.
+10. **PDF export: dual-layer, no host-wide print CSS requirement.** See §9.
 
 ### Still open
 
-8. **Status semantics.** Auto-set `sent` on publish, or keep it manual.
-9. **Terms panel behaviour.** Require the client to open the terms panel before the accept button
-   enables, or log the event and leave the button live. The former is stronger evidence, the latter
-   is less friction. Sales call as much as a legal one.
+11. **Status semantics.** Auto-set `sent` on publish, or keep it manual.
+12. **Terms panel behaviour.** Require the client to open the terms panel before the accept button
+    enables, or log the event and leave the button live. The former is stronger evidence, the latter
+    is less friction. Sales call as much as a legal one.
 
 ---
 
