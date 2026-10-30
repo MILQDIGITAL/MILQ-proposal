@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MILQ. Contact</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Start a brief with MILQ.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body data-page="contact">
+
+<!-- page transition -->
+<div class="pour" aria-hidden="true">
+  <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0 100 L100 100 L100 100 Q50 100 0 100 Z"/></svg>
+  <div class="pour__logo logo">MILQ.</div>
+</div>
+
+<header class="nav">
+  <div class="nav__bar">
+    <a href="index.html" class="nav__logo logo" aria-label="MILQ. home">MILQ.</a>
+    <span class="nav__ctx label" aria-live="polite">No ego. No empty promises.</span>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu"><span><i></i><i></i></span></button>
+  </div>
+  <nav class="nav__panel" id="menu" aria-label="Main">
+    <ul class="nav__links">
+      <li><a href="work.html">Work <span class="label">08</span></a></li>
+      <li><a href="index.html#services">Services <span class="label">04</span></a></li>
+      <li><a href="index.html#process">Process <span class="label">How</span></a></li>
+      <li><a href="index.html#journal">Journal <span class="label">New</span></a></li>
+      <li><a href="contact.html">Contact <span class="label">Hi</span></a></li>
+    </ul>
+    <div class="nav__foot">
+      <a class="btn btn--light" href="contact.html">Start a brief</a>
+      <a class="btn" style="--bg:var(--cobalt)" href="contact.html#call">Book a call</a>
+    </div>
+  </nav>
+</header>
+
+<a class="callpill" href="contact.html#call" data-cursor="Talk">
+  <img src="assets/img/p856.jpg" alt="">
+  <span class="callpill__txt"><span>Talk to Cam</span><small><span data-clock="short">--:--</span> Sydney</small></span>
+  <span class="dot" aria-hidden="true"></span>
+</a>
+
+<div class="gauge" aria-hidden="true"><div class="gauge__tube"><div class="gauge__fill"></div></div><div class="gauge__ticks"></div></div>
+<div class="cursor" aria-hidden="true"><div class="cursor__dot"></div></div>
+<div class="cursor-wrap" aria-hidden="true"><div class="cursor__label"></div></div>
+<div class="peek" aria-hidden="true"><img alt=""></div>
+
+<main>
+
+<section class="page-hero wrap" data-ctx="Your move" data-ml="0 ml">
+  <div class="page-hero__grid">
+    <p class="page-hero__eyebrow label"><span class="bracket">Contact</span> &nbsp; Replies within one business day</p>
+    <h1 class="page-hero__title display h1">
+      <span class="line"><span>Pour it</span></span>
+      <span class="line"><span>all out.</span></span>
+    </h1>
+    <div class="page-hero__aside">
+      <p class="muted" style="margin:0">Tell us what is going on. The more you share, the better the first conversation, and the glass fills up as you go.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section wrap" data-ctx="Build your brief" data-ml="250 ml" style="padding-top:0">
+  <div class="brief">
+    <form class="brief__form" id="brief">
+      <fieldset class="field">
+        <legend><span class="label muted">01</span><span class="h3">What do you need?</span></legend>
+        <div class="options">
+          <label class="opt"><input type="checkbox" name="service" id="svc-strategy" value="Strategy & ops"><span>Strategy &amp; ops</span></label>
+          <label class="opt"><input type="checkbox" name="service" id="svc-build" value="Design & build" checked><span>Shopify design &amp; build</span></label>
+          <label class="opt"><input type="checkbox" name="service" id="svc-migrate" value="Migration"><span>Migration</span></label>
+          <label class="opt"><input type="checkbox" name="service" id="svc-seo" value="SEO & AI growth"><span>SEO &amp; AI growth</span></label>
+          <label class="opt"><input type="checkbox" name="service" id="svc-unsure" value="Not sure yet"><span>Not sure yet</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="field">
+        <legend><span class="label muted">02</span><span class="h3">Rough budget</span></legend>
+        <div class="range">
+          <output class="range__val" id="budget-out" for="budget">$50k – $100k</output>
+          <input type="range" id="budget" name="budget" min="0" max="4" step="1" value="2" aria-label="Budget">
+          <div class="label muted" style="display:flex;justify-content:space-between"><span>Under $25k</span><span>$250k +</span></div>
+        </div>
+      </fieldset>
+      <fieldset class="field">
+        <legend><span class="label muted">03</span><span class="h3">When?</span></legend>
+        <div class="options">
+          <label class="opt"><input type="radio" name="timeline" id="t-asap" value="ASAP"><span>ASAP</span></label>
+          <label class="opt"><input type="radio" name="timeline" id="t-3m" value="Next 3 months" checked><span>Next 3 months</span></label>
+          <label class="opt"><input type="radio" name="timeline" id="t-later" value="Later this year"><span>Later this year</span></label>
+          <label class="opt"><input type="radio" name="timeline" id="t-unsure" value="Not sure yet"><span>Not sure yet</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="field">
+        <legend><span class="label muted">04</span><span class="h3">About you</span></legend>
+        <div class="inputs">
+          <label class="input"><span class="label muted">Name *</span><input id="name" name="name" autocomplete="name" required placeholder="Alex Morgan"></label>
+          <label class="input"><span class="label muted">Email *</span><input id="email" name="email" type="email" autocomplete="email" required placeholder="alex@brand.com"></label>
+          <label class="input"><span class="label muted">Brand</span><input id="company" name="company" autocomplete="organization" placeholder="Brand name"></label>
+          <label class="input"><span class="label muted">Store URL</span><input id="site" name="site" placeholder="brand.com"></label>
+          <label class="input input--full"><span class="label muted">What is going on?</span><textarea id="message" name="message" placeholder="Where the store is stuck, what you have tried, and what good looks like."></textarea></label>
+        </div>
+      </fieldset>
+    </form>
+    <div class="sent" id="brief-done" hidden style="grid-column:1 / 8">
+      <span class="label">Brief ready</span>
+      <p class="display h2" style="margin:0">Thanks, <span id="done-name">there</span>.</p>
+      <p style="margin:0;max-width:32em">This is a design prototype, so nothing has been sent. On the live site this goes straight to a senior strategist, who replies within one business day.</p>
+    </div>
+    <aside class="brief__aside">
+      <div class="carton">
+        <div class="label" style="display:flex;justify-content:space-between"><span>Your brief</span><span id="sum-level" class="tnum">0 ml</span></div>
+        <div class="carton__glass" aria-hidden="true">
+          <div class="carton__milk"><svg viewBox="0 0 200 14" preserveAspectRatio="none"><path d="M0 7 Q12.5 0 25 7 T50 7 T75 7 T100 7 T125 7 T150 7 T175 7 T200 7 V14 H0 Z"/></svg></div>
+          <div class="carton__marks"><span>1000 ml</span><span>750 ml</span><span>500 ml</span><span>250 ml</span></div>
+        </div>
+        <dl>
+          <div><dt class="label">Services</dt><dd id="sum-svc"></dd></div>
+          <div><dt class="label">Budget</dt><dd id="sum-budget"></dd></div>
+          <div><dt class="label">Timing</dt><dd id="sum-when"></dd></div>
+        </dl>
+        <button class="btn btn--light" type="submit" form="brief">Send brief <svg class="arr" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 7h12M8 2l5 5-5 5"/></svg></button>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<section class="section section--ink wrap" id="call" data-ctx="Rather talk?" data-ml="750 ml">
+  <div class="sec-head">
+    <div class="sec-head__eyebrow label"><span class="bracket">Rather talk?</span><span>Mon – Fri, Sydney time</span></div>
+    <h2 class="sec-head__title display h2" data-reveal><span class="line"><span>Straight to a human.</span></span></h2>
+    <div class="sec-head__aside" data-fade>
+      <div style="display:flex;gap:14px;align-items:center">
+        <img src="assets/img/p856.jpg" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;filter:grayscale(1)">
+        <div><b style="font-weight:500">Cameron Gomes</b><br><span class="label muted">Founder · <span data-clock="short">--:--</span> in Sydney</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="channels">
+    <div class="channel"><span class="label muted">Email</span><b id="ch-mail">hello@milqdigital.co</b><button type="button" class="copy" data-copy="hello@milqdigital.co">Copy address</button></div>
+    <div class="channel"><span class="label muted">Phone</span><b id="ch-phone">+61 425 391 295</b><button type="button" class="copy" data-copy="+61 425 391 295">Copy number</button></div>
+    <div class="channel"><span class="label muted">Studio</span><b>Hornsby NSW 2077</b><span class="muted">Australia, working with brands across ANZ, the UK and the US.</span></div>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer" data-ctx="Your move" data-ml="1000 ml">
+  <div class="wrap">
+    <div class="cta">
+      <h2 class="cta__title display h1" data-reveal>
+        <span class="line"><span>Got a brief?</span></span>
+        <span class="line"><span>Pour it out.</span></span>
+      </h2>
+      <div class="cta__aside" data-fade>
+        <p class="muted">Tell us where the store is stuck. A senior person replies within one business day, usually with a question or two.</p>
+        <a class="btn btn--light" href="contact.html" data-magnetic>Start a brief <svg class="arr" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 7h12M8 2l5 5-5 5"/></svg></a>
+      </div>
+    </div>
+    <div class="footer__grid">
+      <div class="footer__col"><span class="label muted">Say hello</span><a class="footer__mail" href="mailto:hello@milqdigital.co">hello@milqdigital.co</a><span>+61 425 391 295</span></div>
+      <div class="footer__col"><span class="label muted">Pages</span><a href="work.html">Work</a><a href="index.html#services">Services</a><a href="index.html#process">Process</a><a href="contact.html">Contact</a></div>
+      <div class="footer__col"><span class="label muted">Social</span><a href="https://www.linkedin.com/" rel="noopener">LinkedIn ↗</a><a href="https://www.instagram.com/" rel="noopener">Instagram ↗</a></div>
+      <div class="footer__col"><span class="label muted">Studio</span><span>Hornsby NSW 2077<br>Australia</span><span class="label tnum" data-clock>-- : -- : --</span></div>
+    </div>
+    <div class="footer__word" aria-hidden="true">
+      <svg viewBox="0 0 1000 330" preserveAspectRatio="xMidYMax meet">
+        <defs>
+          <clipPath id="glass">
+            <path data-level d="M0 0 Q62.5 -16 125 0 T250 0 T375 0 T500 0 T625 0 T750 0 T875 0 T1000 0 T1125 0 T1250 0 T1375 0 T1500 0 T1625 0 T1750 0 T1875 0 T2000 0 V600 H0 Z"/>
+          </clipPath>
+        </defs>
+        <text x="500" y="326" text-anchor="middle" textLength="996" lengthAdjust="spacingAndGlyphs" font-family="Anton, Impact, sans-serif" font-size="440" fill="none" stroke="rgba(241,242,237,.22)" stroke-width="1.2">MILQ.</text>
+        <text x="500" y="326" text-anchor="middle" textLength="996" lengthAdjust="spacingAndGlyphs" font-family="Anton, Impact, sans-serif" font-size="440" fill="#f1f2ed" clip-path="url(#glass)">MILQ.</text>
+      </svg>
+    </div>
+  </div>
+  <div class="footer__bar wrap label">
+    <span>© 2026 MILQ. Digital Pty Ltd</span>
+    <span>Shopify Premier Partner</span>
+    <span><a href="#">Privacy</a> · <a href="#">Terms</a></span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/site.js"></script>
+</body>
+</html>

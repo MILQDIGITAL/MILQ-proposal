@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MILQ. Case Study</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A MILQ. case study.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body data-page="case">
+
+<!-- page transition -->
+<div class="pour" aria-hidden="true">
+  <svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0 100 L100 100 L100 100 Q50 100 0 100 Z"/></svg>
+  <div class="pour__logo logo">MILQ.</div>
+</div>
+
+<header class="nav">
+  <div class="nav__bar">
+    <a href="index.html" class="nav__logo logo" aria-label="MILQ. home">MILQ.</a>
+    <span class="nav__ctx label" aria-live="polite">No ego. No empty promises.</span>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu"><span><i></i><i></i></span></button>
+  </div>
+  <nav class="nav__panel" id="menu" aria-label="Main">
+    <ul class="nav__links">
+      <li><a href="work.html">Work <span class="label">08</span></a></li>
+      <li><a href="index.html#services">Services <span class="label">04</span></a></li>
+      <li><a href="index.html#process">Process <span class="label">How</span></a></li>
+      <li><a href="index.html#journal">Journal <span class="label">New</span></a></li>
+      <li><a href="contact.html">Contact <span class="label">Hi</span></a></li>
+    </ul>
+    <div class="nav__foot">
+      <a class="btn btn--light" href="contact.html">Start a brief</a>
+      <a class="btn" style="--bg:var(--cobalt)" href="contact.html#call">Book a call</a>
+    </div>
+  </nav>
+</header>
+
+<a class="callpill" href="contact.html#call" data-cursor="Talk">
+  <img src="assets/img/p856.jpg" alt="">
+  <span class="callpill__txt"><span>Talk to Cam</span><small><span data-clock="short">--:--</span> Sydney</small></span>
+  <span class="dot" aria-hidden="true"></span>
+</a>
+
+<div class="gauge" aria-hidden="true"><div class="gauge__tube"><div class="gauge__fill"></div></div><div class="gauge__ticks"></div></div>
+<div class="cursor" aria-hidden="true"><div class="cursor__dot"></div></div>
+<div class="cursor-wrap" aria-hidden="true"><div class="cursor__label"></div></div>
+<div class="peek" aria-hidden="true"><img alt=""></div>
+
+<main>
+
+<section class="case-hero" data-ctx="Case study" data-ml="0 ml">
+  <div class="wrap">
+    <p class="label" style="margin:0 0 20px"><span class="bracket">Case study</span> &nbsp; <span data-case="sector"></span></p>
+    <h1 class="display h1"><span class="line"><span data-case="name">Case study</span></span></h1>
+    <p class="lead" data-case="title" style="max-width:22em;margin-top:clamp(20px,2.4vw,36px)" data-fade></p>
+    <div class="case-hero__meta">
+      <div><span class="label muted">Sector</span><span data-case="sector"></span></div>
+      <div><span class="label muted">Platform</span><span data-case="platform"></span></div>
+      <div><span class="label muted">Services</span><span data-case="services"></span></div>
+      <div><span class="label muted">Launched</span><span data-case="year"></span></div>
+    </div>
+  </div>
+  <div class="case-hero__img"><img data-case-img="0" alt="" data-parallax="6"></div>
+</section>
+
+<section class="section wrap" data-ctx="The brief" data-ml="250 ml">
+  <div class="case-body">
+    <p class="case-body__label label bracket">The challenge</p>
+    <div class="case-body__text"><p class="lead" data-case="challenge" data-fade></p></div>
+  </div>
+  <div class="case-body" style="margin-top:clamp(64px,8vw,120px)">
+    <p class="case-body__label label bracket">What we did</p>
+    <div class="case-body__text"><p data-case="approach" data-fade></p><div><a class="btn btn--ghost" href="contact.html" data-magnetic>Start something similar <svg class="arr" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 7h12M8 2l5 5-5 5"/></svg></a></div></div>
+  </div>
+</section>
+
+<section class="section wrap" data-ctx="In pictures" data-ml="400 ml" style="padding-top:0">
+  <div class="gallery">
+    <figure class="px"><img data-case-img="1" alt="" loading="lazy" data-px data-parallax="5"><figcaption class="label">Placeholder imagery</figcaption></figure>
+    <figure class="px"><img data-case-img="2" alt="" loading="lazy" data-px data-parallax="7"></figure>
+    <figure class="px"><img data-case-img="3" alt="" loading="lazy" data-px data-parallax="5"></figure>
+  </div>
+</section>
+
+<section class="section section--ink wrap" data-ctx="What changed" data-ml="600 ml">
+  <div class="sec-head">
+    <div class="sec-head__eyebrow label"><span class="bracket">Results</span><span>Measured against the brief</span></div>
+    <h2 class="sec-head__title display h2" data-reveal><span class="line"><span>The receipts.</span></span></h2>
+  </div>
+  <div class="case-results" data-case="results"></div>
+  <div class="quote" style="margin-top:clamp(80px,10vw,160px)">
+    <div class="quote__body" style="grid-column:3 / -1">
+      <blockquote data-case="quote" data-fade></blockquote>
+      <cite class="label muted" data-case="who"></cite>
+    </div>
+  </div>
+</section>
+
+<section class="next-case" data-ctx="Keep scrolling" data-ml="1000 ml">
+  <div class="next-case__inner wrap">
+    <p class="label"><span class="bracket">Next case</span> &nbsp; keep scrolling to pour into it</p>
+    <a href="case.html" data-case-next data-cursor="Next"><span class="display mega" data-case="next" style="display:block"></span></a>
+    <div class="next-case__bar"><i></i></div>
+  </div>
+</section>
+
+</main>
+<footer class="footer" style="padding-top:0">
+<div class="footer__bar wrap label">
+    <span>© 2026 MILQ. Digital Pty Ltd</span>
+    <span>Shopify Premier Partner</span>
+    <span><a href="#">Privacy</a> · <a href="#">Terms</a></span>
+  </div>
+</footer>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/site.js"></script>
+</body>
+</html>
