@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Separate npm workspace (Parking Lingo) with its own tooling.
+    "parking-lingo/**",
   ]),
 ]);
 

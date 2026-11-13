@@ -1,0 +1,34 @@
+{
+  "name": "@parking-lingo/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sign-reading contract (zod) + deterministic parking rules engine for Parking Lingo.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./fixtures": {
+      "types": "./src/fixtures.ts",
+      "default": "./src/fixtures.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "parking-lingo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Parking Lingo — point your camera at a parking sign, know at a glance if you can park.",
+  "workspaces": [
+    "packages/*",
+    "server",
+    "app"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
