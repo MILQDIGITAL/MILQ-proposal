@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "Parking Lingo",
+    "slug": "parking-lingo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "parkinglingo",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#0B1B33",
+    "ios": {
+      "bundleIdentifier": "com.milqdigital.parkinglingo",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Parking Lingo uses the camera to photograph parking signs so it can tell you whether you can park.",
+        "NSPhotoLibraryUsageDescription": "Parking Lingo lets you pick a photo of a parking sign from your library.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.milqdigital.parkinglingo",
+      "adaptiveIcon": {
+        "backgroundColor": "#0B1B33",
+        "foregroundImage": "./assets/images/adaptive-icon.png"
+      }
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-localization",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0B1B33",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Parking Lingo uses the camera to photograph parking signs so it can tell you whether you can park.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Parking Lingo lets you pick a photo of a parking sign from your library.",
+          "cameraPermission": "Parking Lingo uses the camera to photograph parking signs so it can tell you whether you can park.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#0B1B33",
+          "enableRemoteNotifications": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
