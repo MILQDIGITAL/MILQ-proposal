@@ -22,6 +22,13 @@ import { describePanel, KIND_LABEL, limitLabel, PAYMENT_INSTRUCTION, PAYMENT_LAB
 import type { PanelKind, PaymentMethod, Schedule, SignPanel, SignReading } from "./schema";
 import { SignReadingSchema } from "./schema";
 import {
+  type AustralianJurisdiction,
+  isPublicHolidayOn,
+  jurisdictionFromTimeZone,
+  normaliseJurisdiction,
+  publicHolidaysOn,
+} from "./holidays";
+import {
   addDays,
   assertValidTimeZone,
   DAY,
@@ -80,9 +87,28 @@ interface Ctx {
   vehicleType: VehicleType;
   isElectricVehicle: boolean;
   intendedStayMinutes: number | null;
+  /** Resolved jurisdiction used for the holiday calendar (null = unknown). */
+  jurisdiction: AustralianJurisdiction | null;
+  /** When set, holiday statuses that would be 'unknown' are treated as this (used to test sensitivity). */
+  unknownAs: boolean | null;
 }
 
-function normaliseContext(c: ParkingContext): Ctx {
+/**
+ * Jurisdiction for the holiday calendar: context.jurisdiction, else the
+ * reading's jurisdictionHint, else inferred from the time zone (where safe).
+ */
+export function resolveJurisdiction(
+  context: Pick<ParkingContext, "jurisdiction" | "timeZone">,
+  reading?: Pick<SignReading, "jurisdictionHint"> | null,
+): AustralianJurisdiction | null {
+  return (
+    normaliseJurisdiction(context.jurisdiction) ??
+    normaliseJurisdiction(reading?.jurisdictionHint) ??
+    jurisdictionFromTimeZone(context.timeZone)
+  );
+}
+
+function normaliseContext(c: ParkingContext, reading: SignReading | null): Ctx {
   const nowMs = toInstant(c.now);
   assertValidTimeZone(c.timeZone);
   return {
@@ -90,6 +116,8 @@ function normaliseContext(c: ParkingContext): Ctx {
     tz: c.timeZone,
     todayKey: dateKey(localDateOf(nowMs, c.timeZone)),
     holidayToday: c.isPublicHoliday ?? "unknown",
+    jurisdiction: resolveJurisdiction(c, reading),
+    unknownAs: null,
     holidayDates: new Set(c.publicHolidayDates ?? []),
     permits: (c.permits ?? []).map(normalisePermit).filter((p) => p.length > 0),
     hasDisabilityPermit: c.hasDisabilityPermit ?? false,
@@ -107,11 +135,18 @@ export function normalisePermit(code: string): string {
   return s;
 }
 
-function holidayStatus(d: LocalDate, ctx: Ctx): boolean | "unknown" {
+function rawHolidayStatus(d: LocalDate, ctx: Ctx): boolean | "unknown" {
   const key = dateKey(d);
   if (ctx.holidayDates.has(key)) return true;
-  if (key === ctx.todayKey) return ctx.holidayToday;
-  return false;
+  if (key === ctx.todayKey && typeof ctx.holidayToday === "boolean") return ctx.holidayToday;
+  if (ctx.jurisdiction) return isPublicHolidayOn(d, ctx.jurisdiction);
+  // No calendar: today is unknown; other days are assumed not to be holidays.
+  return key === ctx.todayKey ? "unknown" : false;
+}
+
+function holidayStatus(d: LocalDate, ctx: Ctx): boolean | "unknown" {
+  const s = rawHolidayStatus(d, ctx);
+  return s === "unknown" && ctx.unknownAs != null ? ctx.unknownAs : s;
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +163,7 @@ type HolidayNoteKind = "unknown_sensitive" | "lifted" | "excluded" | "included" 
 interface HolidayNote {
   kind: HolidayNoteKind;
   panelIndex: number;
+  date: LocalDate;
   interval: Interval;
 }
 
@@ -238,7 +274,7 @@ function panelIntervals(
         }
       }
       const clipped = { start: Math.max(iv.start, lo), end: Math.min(iv.end, hi) };
-      if (note && notes) notes.push({ kind: note, panelIndex, interval: clipped });
+      if (note && notes) notes.push({ kind: note, panelIndex, date: d, interval: clipped });
       if (applies) out.push(clipped);
     }
   }
@@ -496,10 +532,11 @@ function uniq(xs: string[]): string[] {
   return [...new Set(xs)];
 }
 
-function emptySide(): Omit<SideVerdict, "status" | "headline" | "summary"> {
+function emptySide(): Omit<SideVerdict, "status" | "headline" | "summary" | "shortLabel"> {
   return {
     maxStayMinutes: null,
     leaveBy: null,
+    unrestrictedUntil: null,
     validUntil: null,
     nextAllowedAt: null,
     currentLimitMinutes: null,
@@ -523,7 +560,81 @@ function unsure(
   warnings: string[] = [],
   evidence: PanelEvidence[] = [],
 ): SideVerdict {
-  return { ...emptySide(), status: "unsure", headline, summary, reasons, warnings: uniq(warnings), evidence };
+  return {
+    ...emptySide(),
+    status: "unsure",
+    headline,
+    shortLabel: unsureShortLabel(headline),
+    summary,
+    reasons,
+    warnings: uniq(warnings),
+    evidence,
+  };
+}
+
+/** "Not sure — rescan" -> "Rescan"; "Sign unclear — rescan" -> "Sign unclear"; else the headline. */
+function unsureShortLabel(headline: string): string {
+  const [a, b] = headline.split(" — ");
+  if (b && a === "Not sure") return b.charAt(0).toUpperCase() + b.slice(1);
+  return a ?? headline;
+}
+
+const NO_SHORT_LABEL: Partial<Record<PanelKind, string>> = {
+  clearway: "Clearway",
+  no_stopping: "No stopping",
+  no_parking: "No parking",
+  special_event: "Special event",
+  bus_lane: "Bus lane",
+  transit_lane: "Transit lane",
+  loading_zone: "Loading zone",
+  bus_zone: "Bus zone",
+  taxi_zone: "Taxi zone",
+  mail_zone: "Mail zone",
+  works_zone: "Works zone",
+  truck_zone: "Truck zone",
+  motorcycle_only: "Motorbikes only",
+  car_share: "Car share only",
+  ev_charging: "EV charging only",
+  disabled_only: "Disability permit only",
+  permit_zone: "Permit holders only",
+};
+
+function noShortLabel(e: Effect | null): string {
+  if (!e) return "No parking";
+  if (e.temporary) {
+    if (e.kind === "works_zone") return "Roadworks";
+    if (e.kind === "clearway" || e.kind === "special_event") return "Temporary clearway";
+    return "Temporary sign";
+  }
+  return NO_SHORT_LABEL[e.kind] ?? "No parking";
+}
+
+/** Clip segments to [now, now + 24h), merging neighbours that look the same. Always from < to. */
+function buildTimeline(segs: Segment[], nowMs: number): TimelineSegment[] {
+  const end = nowMs + TIMELINE_MS;
+  const out: TimelineSegment[] = [];
+  let lastTo = nowMs;
+  for (const s of segs) {
+    const from = Math.max(s.from, nowMs);
+    const to = Math.min(s.to, end);
+    if (!(to > from)) continue;
+    const seg: TimelineSegment = {
+      from: iso(from),
+      to: iso(to),
+      status: timelineStatus(s),
+      label: timelineLabel(s),
+      panels: s.panels,
+    };
+    lastTo = to;
+    const last = out[out.length - 1];
+    if (last && last.status === seg.status && last.label === seg.label) {
+      last.to = seg.to;
+      last.panels = [...new Set([...last.panels, ...seg.panels])].sort((a, b) => a - b);
+    } else out.push(seg);
+  }
+  // Defensive: the sweep always covers the window, but never return a short bar.
+  if (out.length > 0 && lastTo < end) out[out.length - 1]!.to = iso(end);
+  return out;
 }
 
 const NO_HEADLINE: Partial<Record<PanelKind, string>> = {
@@ -698,43 +809,49 @@ function evaluateSide(
   const segs = sweep(intervals, effects, nowMs, horizonEnd);
   const cur = segs[0]!;
   const timelineEnd = nowMs + TIMELINE_MS;
-  const timeline: TimelineSegment[] = [];
-  for (const s of segs) {
-    if (s.from >= timelineEnd) break;
-    const seg: TimelineSegment = {
-      from: iso(s.from),
-      to: iso(Math.min(s.to, timelineEnd)),
-      status: timelineStatus(s),
-      label: timelineLabel(s),
-      panels: s.panels,
-    };
-    const last = timeline[timeline.length - 1];
-    if (last && last.status === seg.status && last.label === seg.label) {
-      last.to = seg.to;
-      last.panels = [...new Set([...last.panels, ...seg.panels])].sort((a, b) => a - b);
-    } else timeline.push(seg);
-  }
+  const timeline = buildTimeline(segs, nowMs);
 
   // Holiday notes relevant to the next 24h.
-  for (const n of holidayNotes) {
-    if (n.interval.end <= nowMs || n.interval.start >= timelineEnd) continue;
+  const relevantNotes = holidayNotes.filter((n) => n.interval.end > nowMs && n.interval.start < timelineEnd);
+  // Unknown holiday status only matters if assuming a holiday would change the next 24h.
+  let holidayMatters = false;
+  if (relevantNotes.some((n) => n.kind === "unknown_sensitive")) {
+    const alt: Ctx = { ...ctx, unknownAs: true };
+    const altIntervals = new Map<number, Interval[]>();
+    for (const i of applicable) altIntervals.set(i, panelIntervals(panels[i]!, i, nowMs, horizonEnd, alt, null));
+    const altTimeline = buildTimeline(sweep(altIntervals, effects, nowMs, horizonEnd), nowMs);
+    const strip = (t: TimelineSegment[]) => JSON.stringify(t.map(({ from, to, status, label }) => [from, to, status, label]));
+    holidayMatters = strip(altTimeline) !== strip(timeline);
+  }
+  const holidayName = (d: LocalDate): string | null =>
+    ctx.jurisdiction ? (publicHolidaysOn(d, ctx.jurisdiction)[0]?.name ?? null) : null;
+  for (const n of relevantNotes) {
     const lbl = panelLabel(panels[n.panelIndex]!);
+    const name = holidayName(n.date);
+    const ph = name ? `Public holiday (${name})` : "Public holiday";
     switch (n.kind) {
       case "unknown_sensitive":
-        warnings.push("Not sure if today is a public holiday — assuming the sign's usual times apply today.");
+        if (!holidayMatters) break;
+        if (name) {
+          warnings.push(
+            `${name} is a public holiday in only part of the state — assuming the sign's usual times apply. Check locally.`,
+          );
+        } else {
+          warnings.push("Not sure if today is a public holiday — assuming the sign's usual times apply today.");
+        }
         break;
       case "lifted":
-        warnings.push(`Public holiday — assuming the ${lbl} times don't apply. Double-check the sign.`);
+        warnings.push(`${ph} — assuming the ${lbl} times don't apply. Double-check the sign.`);
         break;
       case "excluded":
         reasons.push(`Public holidays are excepted on the ${lbl} panel.`);
-        warnings.push(`Public holiday — the ${lbl} times don't apply today. Double-check the sign.`);
+        warnings.push(`${ph} — the ${lbl} times don't apply. Double-check the sign.`);
         break;
       case "included":
         reasons.push(`The ${lbl} panel also applies on public holidays.`);
         break;
       case "kept":
-        warnings.push(`Public holiday — ${lbl} may still apply, so we're treating it as in force.`);
+        warnings.push(`${ph} — ${lbl} may still apply, so we're treating it as in force.`);
         break;
     }
   }
@@ -802,6 +919,7 @@ function evaluateSide(
       ...emptySide(),
       status: "no",
       headline: noHeadline(prim),
+      shortLabel: noShortLabel(prim),
       summary,
       validUntil,
       nextAllowedAt: nextAllowed != null ? iso(nextAllowed) : null,
@@ -841,12 +959,16 @@ function evaluateSide(
     }
     if (leaveSeg) for (const i of leaveSeg.panels) driving.add(i);
 
-    const maxStay = leaveBy != null ? Math.floor((leaveBy - nowMs) / MINUTE) : null;
+    const leaveSoon = leaveBy != null && leaveSeg != null && leaveBy - nowMs <= TIMELINE_MS;
+    // Only meaningful when you must move within 24 h; otherwise see leaveBy / unrestrictedUntil.
+    const maxStay = leaveSoon && leaveBy != null ? Math.floor((leaveBy - nowMs) / MINUTE) : null;
+    const allowedNow = timelineStatus(cur) === "allowed";
+    const nextRestr = segs.find((s) => s.from > nowMs && timelineStatus(s) !== "allowed") ?? null;
+    const unrestrictedUntil = allowedNow && nextRestr ? nextRestr.from : null;
     const paymentNow = cur.severity === LIMITED && cur.payment != null;
     const permitRequired = cur.permitUsed != null;
     const parts: string[] = [];
 
-    const leaveSoon = leaveBy != null && leaveSeg != null && leaveBy - nowMs <= TIMELINE_MS;
     const shortStay = maxStay != null && maxStay <= 4 * 60;
     let moveBy: string | null = null; // appended after payment/permit notes
     if (leaveSoon && leaveSeg && leaveBy != null) {
@@ -867,11 +989,18 @@ function evaluateSide(
         const lbl = leaveSeg.primary ? leaveSeg.primary.label : "Restriction";
         warnings.push(`${lbl} starts ${fmt(leaveBy)} — vehicles are towed.`);
       }
-    } else if (cur.severity === LIMITED && cur.limit == null) parts.push("No time limit.");
-    else parts.push("No restrictions right now.");
+    } else if (allowedNow) {
+      parts.push(
+        nextRestr
+          ? `No restrictions until ${fmt(nextRestr.from)} (${lowerFirst(timelineLabel(nextRestr))}).`
+          : "No restrictions for at least the next 7 days.",
+      );
+    } else if (leaveBy != null) {
+      parts.push(`No time limit until ${fmt(leaveBy)}.`);
+    } else parts.push("No time limit.");
 
     if (paymentNow) parts.push(PAYMENT_INSTRUCTION[cur.payment as Exclude<PaymentMethod, "none">]);
-    else {
+    else if (leaveSoon) {
       const stayEnd = Math.min(leaveBy ?? timelineEnd, timelineEnd);
       const paySeg = segs.find((s) => s.from > nowMs && s.from < stayEnd && s.severity === LIMITED && s.payment != null);
       if (paySeg) parts.push(`Pay from ${fmt(paySeg.from)}.`);
@@ -881,10 +1010,6 @@ function evaluateSide(
     if (cur.note) parts.push(cur.note);
 
     if (moveBy) parts.push(moveBy);
-    if (!leaveSoon) {
-      const nextRestr = segs.find((s) => s.from > nowMs && timelineStatus(s) !== "allowed");
-      if (nextRestr) parts.push(`Next restriction: ${lowerFirst(timelineLabel(nextRestr))} from ${fmt(nextRestr.from)}.`);
-    }
 
     const allAllowed24 = timeline.every((t) => t.status === "allowed");
     let status: SideVerdict["status"] =
@@ -892,6 +1017,15 @@ function evaluateSide(
         ? "yes"
         : "yes_with_conditions";
     if (status === "yes" && expired.size > 0) status = "yes_with_conditions";
+
+    let shortLabel: string;
+    if (status === "yes") shortLabel = "No restrictions";
+    else if (maxStay != null && maxStay <= 4 * 60) shortLabel = `Up to ${formatShortDuration(maxStay)}`;
+    else if (maxStay != null && leaveBy != null) shortLabel = `Until ${formatClock(toLocalMinutes(leaveBy, tz))}`;
+    else if (paymentNow) shortLabel = "Pay to park";
+    else if (permitRequired) shortLabel = "With permit";
+    else if (cur.note) shortLabel = "Conditions apply";
+    else shortLabel = "No time limit now";
 
     let headline: string;
     if (status === "yes") headline = "You can park";
@@ -903,10 +1037,11 @@ function evaluateSide(
 
     let fits: boolean | null = null;
     if (ctx.intendedStayMinutes != null) {
-      fits = maxStay == null || ctx.intendedStayMinutes <= maxStay;
+      const fullStay = leaveBy != null ? Math.floor((leaveBy - nowMs) / MINUTE) : null;
+      fits = fullStay == null || ctx.intendedStayMinutes <= fullStay;
       if (!fits) {
         warnings.push(
-          `You planned ${formatDuration(ctx.intendedStayMinutes)} — the most you can stay is ${formatDuration(maxStay!)}.`,
+          `You planned ${formatDuration(ctx.intendedStayMinutes)} — the most you can stay is ${formatDuration(fullStay!)}.`,
         );
       }
     }
@@ -915,9 +1050,11 @@ function evaluateSide(
       ...emptySide(),
       status,
       headline,
+      shortLabel,
       summary: parts.join(" "),
       maxStayMinutes: maxStay,
       leaveBy: leaveBy != null ? iso(leaveBy) : null,
+      unrestrictedUntil: unrestrictedUntil != null ? iso(unrestrictedUntil) : null,
       validUntil,
       currentLimitMinutes: cur.severity === LIMITED ? cur.limit : null,
       paymentRequired: paymentNow,
@@ -1010,18 +1147,32 @@ function describeLocal(v: string): string {
  * invalid `now` or `timeZone` (programming errors); bad readings yield 'unsure'.
  */
 export function evaluate(reading: SignReading, context: ParkingContext, options: EvaluateOptions = {}): Verdict {
-  const ctx = normaliseContext(context);
+  const ctx = normaliseContext(context, null);
   const opts: Required<EvaluateOptions> = {
     minConfidenceForYes: options.minConfidenceForYes ?? DEFAULT_MIN_CONFIDENCE_FOR_YES,
     minConfidence: options.minConfidence ?? DEFAULT_MIN_CONFIDENCE,
   };
-  const wrap = (sv: SideVerdict, side: Side | "unknown", bySide: Verdict["bySide"] = null): Verdict => ({
-    ...sv,
-    side,
-    bySide,
-    evaluatedAt: iso(ctx.nowMs),
-    timeZone: ctx.tz,
-  });
+  const wrap = (
+    sv: SideVerdict,
+    side: Side | "unknown",
+    bySide: Verdict["bySide"] = null,
+    needsSide = false,
+  ): Verdict => {
+    const today = localDateOf(ctx.nowMs, ctx.tz);
+    const publicHolidayToday = holidayStatus(today, ctx);
+    const name = ctx.jurisdiction ? (publicHolidaysOn(today, ctx.jurisdiction)[0]?.name ?? null) : null;
+    return {
+      ...sv,
+      side,
+      needsSide,
+      bySide,
+      evaluatedAt: iso(ctx.nowMs),
+      timeZone: ctx.tz,
+      jurisdiction: ctx.jurisdiction,
+      publicHolidayToday,
+      publicHolidayName: publicHolidayToday === false ? null : name,
+    };
+  };
   const requestedSide = context.side ?? "unknown";
 
   const parsed = SignReadingSchema.safeParse(reading);
@@ -1034,6 +1185,7 @@ export function evaluate(reading: SignReading, context: ParkingContext, options:
     );
   }
   const r = parsed.data;
+  ctx.jurisdiction = resolveJurisdiction(context, r);
   if (!r.isParkingSign) {
     return wrap(
       unsure("Not a parking sign", "This doesn't look like a parking sign. Point the camera at the sign and rescan.", [
@@ -1078,12 +1230,14 @@ export function evaluate(reading: SignReading, context: ParkingContext, options:
     return wrap({ ...left, evidence: mergeEvidence(left, right) }, "unknown", bySide);
   }
   const sideReason = "The panels point different ways — the answer depends on which side of the pole you park.";
+  const bothNo = left.status === "no" && right.status === "no";
   const combined: SideVerdict = {
     ...emptySide(),
-    status: left.status === "no" && right.status === "no" ? "no" : "unsure",
-    headline: left.status === "no" && right.status === "no" ? "No — either side" : "Depends on side",
+    status: bothNo ? "no" : "unsure",
+    headline: bothNo ? "No — either side" : "Depends on side",
+    shortLabel: bothNo ? "Either side" : "Depends on side",
     summary:
-      left.status === "no" && right.status === "no"
+      bothNo
         ? `Left of the pole: ${left.summary} Right of the pole: ${right.summary}`
         : `Left of the pole: ${left.headline}. Right of the pole: ${right.headline}. Which side are you parking on?`,
     paymentRequired: left.paymentRequired || right.paymentRequired,
@@ -1094,7 +1248,7 @@ export function evaluate(reading: SignReading, context: ParkingContext, options:
     upcomingTemporary: dedupeUpcoming([...left.upcomingTemporary, ...right.upcomingTemporary]),
     evidence: mergeEvidence(left, right),
   };
-  return wrap(combined, "unknown", bySide);
+  return wrap(combined, "unknown", bySide, !bothNo);
 }
 
 function mergeEvidence(a: SideVerdict, b: SideVerdict): PanelEvidence[] {

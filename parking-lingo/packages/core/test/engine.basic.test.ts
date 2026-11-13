@@ -206,7 +206,10 @@ describe("timed parking", () => {
     expect(v.headline).toBe("You can park");
     expect(v.paymentRequired).toBe(false);
     expect(v.leaveBy).toBe(utc("2026-11-16T10:00:00+11:00"));
-    expect(v.summary).toMatch(/No restrictions right now\. Next restriction: 2P · Meter from 8:00 am Mon\./);
+    expect(v.summary).toBe("No restrictions until 8:00 am Mon (2P · Meter).");
+    expect(v.unrestrictedUntil).toBe(utc("2026-11-16T08:00:00+11:00"));
+    expect(v.maxStayMinutes).toBeNull(); // deadline is more than 24 h away
+    expect(v.shortLabel).toBe("No restrictions");
   });
 
   it("Saturday schedule differs from weekdays", () => {

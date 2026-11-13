@@ -176,11 +176,16 @@ export function formatInstant(ms: number, nowMs: number, timeZone: string): stri
   return `${clock} ${formatDate(date)}`;
 }
 
-/** "2 hours", "1 hour", "15 min", "1 hr 30 min", "3 days". */
+/** "2 hours", "1 hour", "15 min", "1 hr 30 min", "1 day 20 hr", "3 days". */
 export function formatDuration(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
   if (m < 60) return `${m} min`;
-  if (m >= 48 * 60 && m % (24 * 60) === 0) return `${m / (24 * 60)} days`;
+  if (m >= 24 * 60) {
+    // Over a day, minutes are noise: "1 day 20 hr", "3 days".
+    const d = Math.floor(m / (24 * 60));
+    const hrs = Math.floor((m % (24 * 60)) / 60);
+    return `${d} ${d === 1 ? "day" : "days"}${hrs ? ` ${hrs} hr` : ""}`;
+  }
   const h = Math.floor(m / 60);
   const rem = m % 60;
   if (rem === 0) return h === 1 ? "1 hour" : `${h} hours`;
@@ -191,6 +196,11 @@ export function formatDuration(minutes: number): string {
 export function formatShortDuration(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
   if (m < 60) return `${m} min`;
+  if (m >= 24 * 60) {
+    const d = Math.floor(m / (24 * 60));
+    const hrs = Math.floor((m % (24 * 60)) / 60);
+    return `${d}d${hrs ? ` ${hrs}h` : ""}`;
+  }
   const h = Math.floor(m / 60);
   const rem = m % 60;
   if (rem === 0) return h === 1 ? "1 hr" : `${h} hrs`;

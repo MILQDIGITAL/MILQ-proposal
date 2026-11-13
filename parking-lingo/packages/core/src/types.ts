@@ -9,14 +9,25 @@ export interface ParkingContext {
   now: Date | string | number;
   /** IANA zone of the sign's location, e.g. "Australia/Sydney". */
   timeZone: string;
-  /** Whether *today* (local date of `now`) is a public holiday. Default 'unknown'. */
+  /**
+   * Whether *today* (local date of `now`) is a public holiday. Default 'unknown'.
+   * A boolean overrides the built-in calendar for today; 'unknown' (or omitted)
+   * means "use the calendar for the resolved jurisdiction, if any".
+   */
   isPublicHoliday?: boolean | "unknown";
   /**
-   * Extra known public holidays as local 'YYYY-MM-DD' dates (used for days in the
-   * timeline other than today). Days not listed (other than today) are assumed
-   * not to be public holidays.
+   * Extra known public holidays as local 'YYYY-MM-DD' dates (e.g. regional show
+   * days). These are always treated as holidays, on top of the calendar.
    */
   publicHolidayDates?: string[];
+  /**
+   * Jurisdiction for the holiday calendar, e.g. "AU-NSW" (also accepts "NSW").
+   * Falls back to reading.jurisdictionHint, then to the time zone where safe
+   * (Australia/Sydney -> NSW, Melbourne -> VIC, Brisbane -> QLD, ...).
+   * Without any jurisdiction, today's holiday status is unknown and other days
+   * are assumed not to be holidays.
+   */
+  jurisdiction?: string | null;
   /** Side of the pole the user wants to park on, as seen facing the sign. Default 'unknown'. */
   side?: Side | "unknown";
   /** Permit area codes held, e.g. ["12", "Area 5"]. Default []. */
@@ -83,12 +94,31 @@ export interface SideVerdict {
   status: VerdictStatus;
   /** ≤ ~4 words, e.g. "You can park", "No — clearway". */
   headline: string;
+  /**
+   * The headline without the yes/no part, for showing under a big YES/NO:
+   * "Up to 2 hrs", "Until 6:00 am", "Pay to park", "With permit", "No restrictions",
+   * "Clearway", "No stopping", "Loading zone", "Temporary sign", "Rescan", "Depends on side".
+   */
+  shortLabel: string;
   /** One or a few short plain-English sentences. */
   summary: string;
-  /** Longest stay starting now, in minutes (null = no limit within the next 7 days or not parkable). */
+  /**
+   * Longest stay starting now, in minutes — set only when you must move within the
+   * next 24 hours (i.e. `leaveBy` is within 24 h). null when parking isn't allowed,
+   * or when there is no deadline within 24 h (see `leaveBy` / `unrestrictedUntil`).
+   */
   maxStayMinutes: number | null;
-  /** ISO instant: earliest of time-limit expiry or start of the next prohibiting restriction. */
+  /**
+   * ISO instant: earliest of time-limit expiry or start of the next prohibiting
+   * restriction, searched up to 8 days ahead (null = none found).
+   */
   leaveBy: string | null;
+  /**
+   * When parking is currently unrestricted for you (timeline "allowed" now): the ISO
+   * instant the next restriction of any kind (limit, fee, prohibition) starts,
+   * within 8 days. null if parking is restricted now or nothing starts within 8 days.
+   */
+  unrestrictedUntil: string | null;
   /** ISO instant when the rules for this spot next change (end of current segment). */
   validUntil: string | null;
   /** When status is 'no': ISO instant parking next becomes allowed (within 7 days), else null. */
@@ -114,6 +144,14 @@ export interface SideVerdict {
 export interface Verdict extends SideVerdict {
   /** Side this verdict was computed for ('unknown' if the side doesn't matter or wasn't given). */
   side: Side | "unknown";
+  /** True when the answer differs by side of the pole: ask the user, then use `bySide`. */
+  needsSide: boolean;
+  /** Jurisdiction used for the holiday calendar, e.g. "AU-NSW" (null if unknown). */
+  jurisdiction: string | null;
+  /** Whether today is a public holiday as used by the engine. */
+  publicHolidayToday: boolean | "unknown";
+  /** Name of today's public holiday from the calendar, if any. */
+  publicHolidayName: string | null;
   /** Per-side answers when the side is unknown and the panels differ by side. */
   bySide: { left: SideVerdict; right: SideVerdict } | null;
   evaluatedAt: string;
