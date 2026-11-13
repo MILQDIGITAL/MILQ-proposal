@@ -37,6 +37,8 @@ export type WarningKind = "temporary" | "tow" | "legibility" | "holiday" | "gene
 export interface WarningItem {
   kind: WarningKind;
   text: string;
+  /** Core is unsure whether today is a public holiday and it changes the answer: offer the inline toggle. */
+  holidayQuestion: boolean;
 }
 
 export interface TemporaryAlert {
@@ -54,8 +56,10 @@ export interface VerdictViewModel {
   icon: string;
   /** The engine headline. */
   headline: string;
-  /** Headline without a "Yes — "/"No — " prefix that repeats the status word. */
+  /** Core's shortLabel: the headline without the yes/no part ("Up to 2 hrs", "Clearway"). */
   heroHeadline: string;
+  /** e.g. "Public holiday today: Christmas Day", when the calendar says today is one. */
+  holidayNote: string | null;
   /** Whether the hero shows headline + summary (hidden when the side selector says it better). */
   showDetails: boolean;
   summary: string;
@@ -98,7 +102,7 @@ const PAYMENT_CHIP: Record<Exclude<PaymentMethod, "none">, { label: string; deta
 
 /** True when the combined verdict asks the user to choose a side. */
 export function dependsOnSide(v: Verdict): boolean {
-  return v.bySide !== null && v.side === "unknown" && v.headline === "Depends on side";
+  return v.needsSide && v.bySide !== null;
 }
 
 export function classifyWarning(text: string): WarningKind {
@@ -120,22 +124,33 @@ export function buildWarnings(warnings: readonly string[]): WarningItem[] {
       seen.add(w);
       return true;
     })
-    .map((text) => ({ kind: classifyWarning(text), text }))
+    .map((text) => ({ kind: classifyWarning(text), text, holidayQuestion: /^not sure if .* public holiday/i.test(text) }))
     .sort((a, b) => WARNING_ORDER[a.kind] - WARNING_ORDER[b.kind]);
 }
 
-/** Banner for temporary signs (roadworks, event clearways) in force now or coming up. */
+const OVERRIDE_WARNING = "A temporary sign overrides the regular sign right now.";
+const TEMP_ACTIVE_WARNING = "A temporary sign is in force right now.";
+
+/**
+ * Banner for temporary signs (roadworks, event clearways). Whether a temporary sign is
+ * actually driving the answer comes from core's warnings — the app doesn't re-derive it.
+ */
 export function buildTemporaryAlert(v: SideVerdict, reading: SignReading | null, nowMs: number, timeZone: string): TemporaryAlert | null {
-  if (reading) {
-    const active = v.evidence.find((e) => e.state === "active_now" && reading.panels[e.panelIndex]?.temporary);
-    if (active) {
-      const p = reading.panels[active.panelIndex]!;
-      return {
-        state: "active",
-        title: "Temporary sign in force",
-        detail: `${panelLabel(p)} overrides the regular sign${p.towAway ? " — tow-away" : ""}.`,
-      };
-    }
+  const overrides = v.warnings.includes(OVERRIDE_WARNING);
+  const inForce = overrides || v.warnings.includes(TEMP_ACTIVE_WARNING);
+  if (inForce) {
+    const driving = reading
+      ? v.evidence.find((e) => e.state === "active_now" && e.drivesDecision && reading.panels[e.panelIndex]?.temporary)
+      : undefined;
+    const p = driving && reading ? reading.panels[driving.panelIndex] : undefined;
+    const what = p ? panelLabel(p) : "A temporary sign";
+    return {
+      state: "active",
+      title: "Temporary sign in force",
+      detail: overrides
+        ? `${what} overrides the regular sign${p?.towAway ? " — tow-away" : ""}.`
+        : `${what} applies right now${p?.towAway ? " — tow-away" : ""}.`,
+    };
   }
   const next = v.upcomingTemporary[0];
   if (next) {
@@ -146,16 +161,6 @@ export function buildTemporaryAlert(v: SideVerdict, reading: SignReading | null,
       title: "Temporary sign coming up",
       detail: `${next.label} from ${formatInstant(from, nowMs, timeZone)}${to ? ` to ${to}` : ""}.`,
     };
-  }
-  if (reading) {
-    const soon = v.evidence.find((e) => e.state === "upcoming" && reading.panels[e.panelIndex]?.temporary && e.nextStart);
-    if (soon && soon.nextStart) {
-      return {
-        state: "upcoming",
-        title: "Temporary sign coming up",
-        detail: `${soon.label} from ${formatInstant(Date.parse(soon.nextStart), nowMs, timeZone)}.`,
-      };
-    }
   }
   return null;
 }
@@ -178,8 +183,8 @@ export function buildChips(v: SideVerdict, nowMs: number, timeZone: string): Fac
         countdownTo: v.leaveBy,
       });
     }
-    // Beyond a day the "Leave by" tile says it better than "Up to 44 hr 14 min".
-    if (v.maxStayMinutes != null && v.maxStayMinutes < 24 * 60) {
+    // Core sets maxStayMinutes only when you must move within 24 h.
+    if (v.maxStayMinutes != null) {
       chips.push({
         key: "stay",
         icon: "hourglass-outline",
@@ -190,8 +195,12 @@ export function buildChips(v: SideVerdict, nowMs: number, timeZone: string): Fac
         tone: "caution",
         countdownTo: null,
       });
-    } else if (v.maxStayMinutes == null && v.leaveBy == null) {
-      chips.push({ key: "noLimit", icon: "infinite-outline", label: "No time limit", caption: null, value: null, detail: "For the next 7 days", tone: "good", countdownTo: null });
+    } else if (v.leaveBy == null && v.unrestrictedUntil) {
+      // Unrestricted now; a limit or fee (not a prohibition) starts later.
+      const at = formatInstant(Date.parse(v.unrestrictedUntil), nowMs, timeZone);
+      chips.push({ key: "noLimit", icon: "infinite-outline", label: `No limit until ${at}`, caption: null, value: null, detail: "Then the sign's limits apply", tone: "good", countdownTo: null });
+    } else if (v.leaveBy == null) {
+      chips.push({ key: "noLimit", icon: "infinite-outline", label: "No time limit", caption: null, value: null, detail: "For at least the next 7 days", tone: "good", countdownTo: null });
     }
   } else if (v.status === "no" && v.nextAllowedAt) {
     chips.push({
@@ -219,18 +228,6 @@ export function buildChips(v: SideVerdict, nowMs: number, timeZone: string): Fac
   return chips;
 }
 
-/** "Yes — 2 hrs" → "2 hrs", "No — clearway" → "Clearway"; others unchanged. */
-export function stripStatusPrefix(headline: string): string {
-  const m = /^(yes|no)\s*[—–-]\s*(.+)$/i.exec(headline.trim());
-  if (!m || !m[2]) return headline;
-  const rest = m[2];
-  // Keep "No — either side" style phrases readable.
-  if (/^either side$/i.test(rest)) return headline;
-  // "Yes — 2 hrs" → "Up to 2 hrs"
-  if (/^\d/.test(rest)) return `Up to ${rest}`;
-  return rest.charAt(0).toUpperCase() + rest.slice(1);
-}
-
 export function buildVerdictViewModel(v: Verdict, reading: SignReading | null, nowMs: number): VerdictViewModel {
   const tone = toneFor(v.status, dependsOnSide(v));
   const meta = TONE_META[tone];
@@ -238,7 +235,7 @@ export function buildVerdictViewModel(v: Verdict, reading: SignReading | null, n
   const temporaryAlert = buildTemporaryAlert(v, reading, nowMs, v.timeZone);
   let warnings = buildWarnings(v.warnings);
   // The banner already says this; don't repeat it in the list.
-  if (temporaryAlert?.state === "active") warnings = warnings.filter((w) => !/overrides the regular sign/i.test(w.text));
+  if (temporaryAlert?.state === "active") warnings = warnings.filter((w) => w.text !== OVERRIDE_WARNING && w.text !== TEMP_ACTIVE_WARNING);
   const a11yParts = [`${meta.word.toLowerCase()}. ${v.headline}.`, v.summary];
   for (const c of chips) {
     if (c.countdownTo) {
@@ -254,7 +251,8 @@ export function buildVerdictViewModel(v: Verdict, reading: SignReading | null, n
     statusQualifier: meta.qualifier,
     icon: meta.icon,
     headline: v.headline,
-    heroHeadline: tone === "yes" || tone === "conditional" || tone === "no" ? stripStatusPrefix(v.headline) : v.headline,
+    heroHeadline: v.shortLabel,
+    holidayNote: v.publicHolidayToday === true ? `Public holiday today${v.publicHolidayName ? `: ${v.publicHolidayName}` : ""}` : null,
     showDetails: tone !== "side",
     summary: v.summary,
     chips,
@@ -275,7 +273,7 @@ export function sideSummary(v: SideVerdict, nowMs: number, timeZone: string): { 
   } else if (v.status === "no" && v.nextAllowedAt) {
     detail = `Until ${formatInstant(Date.parse(v.nextAllowedAt), nowMs, timeZone)}`;
   }
-  return { tone, word: meta.word, icon: meta.icon, headline: v.headline, detail };
+  return { tone, word: meta.word, icon: meta.icon, headline: v.shortLabel, detail };
 }
 
 export { formatCountdown };

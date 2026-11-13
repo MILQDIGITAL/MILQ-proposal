@@ -1,5 +1,5 @@
 /** Result: the verdict, readable at a glance. Re-evaluated locally every minute. */
-import { evaluate, type Side, type Verdict } from "@parking-lingo/core";
+import { evaluate, type Side } from "@parking-lingo/core";
 import { fixturesById } from "@parking-lingo/core/fixtures";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,7 +15,9 @@ import { TemporaryBanner, UpcomingTemporaryList, WarningsList } from "../compone
 import { useNow } from "../hooks/useNow";
 import { getDeviceTimeZone, verdictHaptic } from "../lib/device";
 import { cancelReminder, scheduleLeaveReminder } from "../lib/notifications";
+import { intlSupport } from "../logic/intlCheck";
 import { planReminder } from "../logic/reminder";
+import { resolveVerdict } from "../logic/resolveVerdict";
 import { buildVerdictViewModel, dependsOnSide } from "../logic/viewModel";
 import { useSettings } from "../state/AppProviders";
 import { buildContext } from "../state/settings";
@@ -24,7 +26,7 @@ import { scanStore, useScanState } from "../state/scanStore";
 import { radius, space, usePalette } from "../theme";
 
 export default function ResultScreen() {
-  const params = useLocalSearchParams<{ fixture?: string; clock?: string }>();
+  const params = useLocalSearchParams<{ fixture?: string; clock?: string; intl?: string }>();
   const { result } = useScanState();
 
   // Deep link / web review: /result?fixture=<id>[&clock=now]
@@ -38,10 +40,11 @@ export default function ResultScreen() {
   }, [params.fixture, params.clock, result]);
 
   if (!result) return null;
-  return <ResultView key={result.id} />;
+  // Dev-only: /result?fixture=…&intl=fail simulates an engine that failed the Intl self-check.
+  return <ResultView key={result.id} simulateIntlFailure={__DEV__ && params.intl === "fail"} />;
 }
 
-function ResultView() {
+function ResultView({ simulateIntlFailure = false }: { simulateIntlFailure?: boolean }) {
   const p = usePalette();
   const insets = useSafeAreaInsets();
   const { result } = useScanState();
@@ -56,18 +59,20 @@ function ResultView() {
   // Re-evaluate once a minute (and whenever inputs change); countdowns tick every second.
   const minute = Math.floor(nowMs / 60_000) * 60_000;
 
-  const evaluated = useMemo(() => {
+  const intlOk = !simulateIntlFailure && intlSupport().ok;
+  const resolution = useMemo(() => {
     if (!result) return null;
     const ctx = (s: Side | "unknown") =>
       buildContext(settings, { now: minute, timeZone: result.timeZone, side: s, isPublicHoliday: holiday, overrides: result.overrides ?? undefined });
-    try {
-      const base = evaluate(result.reading, ctx("unknown"));
-      const shown: Verdict = side === "unknown" ? base : evaluate(result.reading, ctx(side));
-      return { base, shown };
-    } catch {
-      return result.serverVerdict ? { base: result.serverVerdict, shown: result.serverVerdict } : null;
-    }
-  }, [result, settings, side, holiday, minute]);
+    return resolveVerdict({
+      intlOk,
+      side,
+      evaluateLocal: (s) => evaluate(result.reading, ctx(s)),
+      serverVerdict: result.serverVerdict,
+      nowMs: minute,
+    });
+  }, [result, settings, side, holiday, minute, intlOk]);
+  const evaluated = resolution && resolution.kind !== "error" ? resolution : null;
 
   const vm = useMemo(
     () => (evaluated && result ? buildVerdictViewModel(evaluated.shown, result.reading, nowMs) : null),
@@ -89,10 +94,22 @@ function ResultView() {
   }, [vm]);
 
   if (!result || !evaluated || !vm) {
+    const err = resolution?.kind === "error" ? resolution : null;
     return (
-      <View style={[styles.fill, { backgroundColor: p.background, alignItems: "center", justifyContent: "center", padding: space.xl }]}>
-        <AppText variant="title">Couldn&apos;t work this one out</AppText>
-        <Button label="Rescan" icon="camera-outline" onPress={() => router.replace("/")} style={{ marginTop: space.lg }} />
+      <View style={[styles.fill, styles.errorWrap, { backgroundColor: p.background }]} accessibilityRole="alert" testID="result-error">
+        <View style={[styles.errorIcon, { backgroundColor: p.tone.unsure.soft }]}>
+          <Icon name="warning-outline" size={36} color={p.tone.unsure.onSoft} />
+        </View>
+        <AppText variant="title" style={{ textAlign: "center" }}>
+          {err?.title ?? "Couldn't work this one out"}
+        </AppText>
+        <AppText variant="body" muted style={{ textAlign: "center" }}>
+          {err?.message ?? "Rescan to try again."}
+        </AppText>
+        <AppText variant="footnote" muted style={{ textAlign: "center" }}>
+          Until then, read the sign yourself — don&apos;t rely on the app.
+        </AppText>
+        <Button label="Rescan" icon="camera-outline" size="lg" onPress={() => router.dismissTo("/")} style={{ alignSelf: "stretch", marginTop: space.md }} />
       </View>
     );
   }
@@ -168,10 +185,38 @@ function ResultView() {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: space.xl }]} testID="result-scroll">
+        {evaluated.kind === "server" ? (
+          <View style={[styles.notice, { backgroundColor: p.tone.unsure.soft, borderColor: p.tone.unsure.fill }]} accessibilityRole="alert" testID="server-verdict-notice">
+            <Icon name="cloud-done-outline" size={20} color={p.tone.unsure.onSoft} />
+            <AppText variant="callout" color={p.tone.unsure.onSoft} style={{ flex: 1, fontWeight: "600" }}>
+              {evaluated.notice}
+            </AppText>
+          </View>
+        ) : null}
+
         <VerdictHero vm={vm} sideLabel={side === "left" ? "← LEFT OF THE POLE" : side === "right" ? "RIGHT OF THE POLE →" : null} />
 
         {showSides && base.bySide ? (
-          <SideSelector bySide={base.bySide} selected={side} onSelect={setSide} nowMs={nowMs} timeZone={tz} />
+          <SideSelector bySide={base.bySide} reading={result.reading} selected={side} onSelect={setSide} nowMs={nowMs} timeZone={tz} />
+        ) : null}
+
+        {vm.holidayNote ? (
+          <View style={[styles.notice, { backgroundColor: p.tone.side.soft, borderColor: p.tone.side.fill }]} testID="holiday-note">
+            <Icon name="calendar" size={20} color={p.tone.side.onSoft} />
+            <AppText variant="callout" color={p.tone.side.onSoft} style={{ flex: 1, fontWeight: "700" }}>
+              {vm.holidayNote}
+            </AppText>
+          </View>
+        ) : null}
+
+        {holiday !== "unknown" ? (
+          <View style={[styles.notice, { backgroundColor: p.surface, borderColor: p.border }]}>
+            <Icon name="calendar-outline" size={20} color={p.textMuted} />
+            <AppText variant="callout" style={{ flex: 1 }}>
+              You said today {holiday ? "is" : "isn't"} a public holiday.
+            </AppText>
+            <Button label="Undo" variant="ghost" onPress={() => setHoliday("unknown")} style={{ minHeight: 44, paddingHorizontal: space.sm }} />
+          </View>
         ) : null}
 
         {vm.temporaryAlert ? <TemporaryBanner alert={vm.temporaryAlert} /> : null}
@@ -211,6 +256,7 @@ function ResultView() {
           photoUri={result.photoUri}
           nowMs={nowMs}
           timeZone={tz}
+          jurisdiction={shown.jurisdiction}
         />
       </ScrollView>
 
@@ -257,4 +303,7 @@ const styles = StyleSheet.create({
   footer: { borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.sm },
   disclaimer: { flexDirection: "row", gap: 6, alignItems: "center" },
   actions: { flexDirection: "row", gap: space.sm },
+  errorWrap: { alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.md },
+  errorIcon: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
+  notice: { flexDirection: "row", gap: space.sm, alignItems: "center", padding: space.md, borderRadius: radius.md, borderWidth: 1.5 },
 });

@@ -50,6 +50,12 @@ docs/screenshots/ iPhone-size (390×844 @2x) renders of the result screen in dem
 - Not-a-parking-sign and very low confidence readings (< 0.5) show "That's not a parking sign" /
   "Move closer and rescan" instead of a result. Request timeout is 75 s (server read timeout 60 s);
   after 15 s the progress card says it's taking longer than usual.
+- Verdicts are computed locally only if the startup Intl self-check passes (AM/PM/midnight/DST
+  probes in `src/logic/intlCheck.ts`). Otherwise — or if local evaluation throws — the app shows
+  the server's verdict only while it is < 90 s old (with a notice), else an error with Rescan
+  (`src/logic/resolveVerdict.ts`). Dev: `/result?fixture=<id>&intl=fail` simulates the failure.
+- `EXPO_PUBLIC_MOCK_DEMO_TIME=1` (with the server in mock mode) sends `x-mock-demo-time: 1` and runs
+  the result on the fixture's demo clock.
 - Reminder permission is only requested when the user taps "Set a reminder".
 
 ## Checks

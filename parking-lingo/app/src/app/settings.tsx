@@ -1,12 +1,12 @@
 /** Settings (persisted): permits, disability permit, vehicle, EV, reminder lead, demo mode. */
 import { normalisePermit, type VehicleType } from "@parking-lingo/core";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from "react-native";
 import { AppText, Button, Card, Icon, SectionTitle } from "../components/ui";
 import { config } from "../config";
 import { getDeviceTimeZone, tapHaptic } from "../lib/device";
-import { checkIntlTimeZoneSupport } from "../logic/intlCheck";
+import { intlSupport } from "../logic/intlCheck";
 import { useSettings } from "../state/AppProviders";
 import { dedupePermits, parsePermitInput, REMINDER_LEAD_OPTIONS, VEHICLE_LABEL, VEHICLE_TYPES } from "../state/settings";
 import { radius, space, usePalette } from "../theme";
@@ -59,7 +59,7 @@ export default function SettingsScreen() {
   const p = usePalette();
   const { settings, update } = useSettings();
   const [permitText, setPermitText] = useState("");
-  const intl = useMemo(() => checkIntlTimeZoneSupport(), []);
+  const intl = intlSupport();
 
   const addPermits = () => {
     const add = parsePermitInput(permitText);

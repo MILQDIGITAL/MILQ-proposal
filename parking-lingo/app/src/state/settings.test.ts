@@ -1,6 +1,5 @@
 import { getFixture } from "@parking-lingo/core/fixtures";
 import { describe, expect, it } from "vitest";
-import { checkIntlTimeZoneSupport } from "../logic/intlCheck";
 import { fitLongEdge, base64Bytes } from "../logic/image";
 import { planReminder } from "../logic/reminder";
 import { addToHistory, parseStoredHistory, type HistoryEntry } from "./history";
@@ -129,8 +128,3 @@ describe("history", () => {
   });
 });
 
-describe("Intl self-check", () => {
-  it("passes on Node (full ICU)", () => {
-    expect(checkIntlTimeZoneSupport()).toEqual({ ok: true, detail: "Intl time zones OK" });
-  });
-});

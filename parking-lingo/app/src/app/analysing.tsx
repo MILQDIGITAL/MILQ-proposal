@@ -1,5 +1,6 @@
 /** Analysing: frozen photo + progress; cancellable; friendly errors with retry. */
 import { evaluate } from "@parking-lingo/core";
+import { fixturesById } from "@parking-lingo/core/fixtures";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, Image, StyleSheet, View } from "react-native";
@@ -9,9 +10,11 @@ import { AppError, errorCopy, errorFromReading, errorFromThrown, type ErrorActio
 import { AppText, Button, Icon } from "../components/ui";
 import { config } from "../config";
 import { getDeviceTimeZone, verdictHaptic } from "../lib/device";
+import { intlSupport } from "../logic/intlCheck";
 import { useHistory, useSettings } from "../state/AppProviders";
 import { buildContext, buildServerContext } from "../state/settings";
 import { newScanId, scanStore, useScanState } from "../state/scanStore";
+import { demoResult } from "../state/sessions";
 import { radius, space, usePalette } from "../theme";
 
 const STEPS = ["Reading the sign…", "Checking days and times…", "Working out your answer…"];
@@ -45,6 +48,7 @@ export default function AnalysingScreen() {
           timeoutMs: config.requestTimeoutMs,
           signal: controller.signal,
           mockFixture: config.mockFixture,
+          mockDemoTime: config.mockDemoTime,
         },
       );
       if (controller.signal.aborted) return;
@@ -54,7 +58,7 @@ export default function AnalysingScreen() {
       const id = res.requestId ?? newScanId();
       let status = res.verdict?.status ?? "unsure";
       let headline = res.verdict?.headline ?? "";
-      try {
+      if (intlSupport().ok) try {
         const v = evaluate(res.reading, buildContext(settings, { now: Date.now(), timeZone }));
         status = v.status;
         headline = v.headline;
@@ -72,6 +76,9 @@ export default function AnalysingScreen() {
         fixtureId: res.meta?.mock?.fixtureId ?? null,
         requestId: res.requestId,
       });
+      // Mock server answering at a fixture's demo time: run the same demo clock locally.
+      const mockFixture = config.mockDemoTime && res.meta?.mock?.fixtureId ? fixturesById[res.meta.mock.fixtureId] : undefined;
+      const demo = mockFixture ? demoResult(mockFixture, true, undefined, timeZone) : null;
       scanStore.setResult({
         id,
         source: pending.source,
@@ -80,10 +87,10 @@ export default function AnalysingScreen() {
         requestId: res.requestId,
         photoUri: pending.uri,
         thumbnail: pending.thumbnail,
-        timeZone,
+        timeZone: demo?.timeZone ?? timeZone,
         scannedAt: new Date(started).toISOString(),
-        clockOffsetMs: 0,
-        overrides: null,
+        clockOffsetMs: demo?.clockOffsetMs ?? 0,
+        overrides: demo?.overrides ?? null,
         fixtureId: null,
       });
       router.replace("/result");

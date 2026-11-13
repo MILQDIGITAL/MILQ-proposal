@@ -30,7 +30,7 @@ export default function DemoScreen() {
             f.reading,
             buildContext(settings, { now: useDemoClock ? now : nowMinute, timeZone: useDemoClock ? timeZone : deviceTz, overrides }),
           );
-          return { f, tone: toneFor(v.status, v.headline === "Depends on side"), headline: v.headline };
+          return { f, tone: toneFor(v.status, v.needsSide), headline: v.headline };
         } catch {
           return { f, tone: "unsure" as const, headline: "—" };
         }

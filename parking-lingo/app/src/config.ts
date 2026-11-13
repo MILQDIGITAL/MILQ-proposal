@@ -18,6 +18,8 @@ export const config = {
   slowAfterMs: 15_000,
   /** Dev only: with the server in mock mode (MOCK_VISION=1), ask for this fixture via `x-mock-fixture`. */
   mockFixture: (process.env.EXPO_PUBLIC_MOCK_FIXTURE ?? "").trim() || null,
+  /** Dev only: also send `x-mock-demo-time: 1` so the mock answers at the fixture's demo time. */
+  mockDemoTime: process.env.EXPO_PUBLIC_MOCK_DEMO_TIME === "1",
 } as const;
 
 export const isApiConfigured = (): boolean => config.apiUrl !== null;

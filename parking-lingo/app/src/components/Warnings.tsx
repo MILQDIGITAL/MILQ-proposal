@@ -81,7 +81,7 @@ export function WarningsList({
                 {w.text}
               </AppText>
             </View>
-            {w.kind === "holiday" ? <HolidayToggle value={isPublicHoliday} onChange={onSetPublicHoliday} /> : null}
+            {w.holidayQuestion ? <HolidayToggle value={isPublicHoliday} onChange={onSetPublicHoliday} /> : null}
           </View>
         );
       })}

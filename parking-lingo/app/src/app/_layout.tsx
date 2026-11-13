@@ -3,7 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { checkIntlTimeZoneSupport } from "../logic/intlCheck";
+import { intlSupport } from "../logic/intlCheck";
 import { AppProviders } from "../state/AppProviders";
 import { dark, light } from "../theme";
 
@@ -12,7 +12,7 @@ export default function RootLayout() {
   const p = scheme === "dark" ? dark : light;
 
   useEffect(() => {
-    const r = checkIntlTimeZoneSupport();
+    const r = intlSupport();
     if (!r.ok) console.warn(`[parking-lingo] Intl time-zone support check failed: ${r.detail}`);
   }, []);
 

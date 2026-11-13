@@ -43,6 +43,8 @@ export interface ClientOptions {
   fetchImpl?: typeof fetch;
   /** Dev: fixture id sent as `x-mock-fixture` (server mock mode only). */
   mockFixture?: string | null;
+  /** Dev: send `x-mock-demo-time: 1` (server mock mode uses the fixture's demo context). */
+  mockDemoTime?: boolean;
 }
 
 export async function readSign(req: ReadSignRequest, opts: ClientOptions): Promise<ReadSignResult> {
@@ -68,6 +70,7 @@ export async function readSign(req: ReadSignRequest, opts: ClientOptions): Promi
     const headers: Record<string, string> = { "content-type": "application/json", accept: "application/json" };
     if (opts.appToken) headers["x-app-token"] = opts.appToken;
     if (opts.mockFixture) headers["x-mock-fixture"] = opts.mockFixture;
+    if (opts.mockDemoTime) headers["x-mock-demo-time"] = "1";
 
     let res: Response;
     try {

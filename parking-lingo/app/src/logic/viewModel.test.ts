@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildContext, DEFAULT_SETTINGS } from "../state/settings";
 import { countdownText, formatCountdown, shortHourLabel } from "./format";
 import { buildTimelineModel } from "./timeline";
-import { buildVerdictViewModel, classifyWarning, dependsOnSide, stripStatusPrefix, toneFor } from "./viewModel";
+import { buildVerdictViewModel, buildWarnings, classifyWarning, dependsOnSide, toneFor } from "./viewModel";
 
 function verdictFor(id: string, extra: Parameters<typeof buildContext>[1] extends infer T ? Partial<T> : never = {}): { v: Verdict; now: number; reading: ReturnType<typeof getFixture>["reading"] } {
   const f = getFixture(id);
@@ -43,13 +43,6 @@ describe("toneFor / stripStatusPrefix / classifyWarning", () => {
     expect(toneFor("unsure", false)).toBe("unsure");
     expect(toneFor("unsure", true)).toBe("side");
   });
-  it("strips a status prefix that repeats the badge", () => {
-    expect(stripStatusPrefix("Yes — 2 hrs")).toBe("Up to 2 hrs");
-    expect(stripStatusPrefix("Yes — until 6:00 am")).toBe("Until 6:00 am");
-    expect(stripStatusPrefix("No — clearway")).toBe("Clearway");
-    expect(stripStatusPrefix("No parking")).toBe("No parking");
-    expect(stripStatusPrefix("No — either side")).toBe("No — either side");
-  });
   it("classifies warnings", () => {
     expect(classifyWarning("A temporary sign overrides the regular sign right now.")).toBe("temporary");
     expect(classifyWarning("Clearway starts 3:00 pm — vehicles are towed.")).toBe("tow");
@@ -75,8 +68,9 @@ describe("buildVerdictViewModel", () => {
     expect(vm.chips[1]!.label).toBe("Up to 2 hours");
     expect(vm.chips[2]!.label).toBe("Pay at meter");
     expect(vm.accessibilityLabel).toContain("Leave by 12:30 pm, in 2 hours");
-    // holiday doubt sorts last
-    expect(vm.warnings.at(-1)?.kind).toBe("holiday");
+    // NSW calendar resolves the holiday question, so no "not sure" warning any more.
+    expect(vm.warnings).toEqual([]);
+    expect(vm.holidayNote).toBeNull();
   });
 
   it("clearway sandwich: tow-away chip and tow warning", () => {
@@ -94,7 +88,8 @@ describe("buildVerdictViewModel", () => {
     expect(vm.tone).toBe("no");
     expect(vm.haptic).toBe("error");
     expect(vm.temporaryAlert?.state).toBe("active");
-    expect(vm.temporaryAlert?.detail).toContain("Temporary no stopping");
+    expect(vm.temporaryAlert?.title).toBe("Temporary sign in force");
+    expect(vm.temporaryAlert?.detail).toBe("Temporary no stopping overrides the regular sign — tow-away.");
     expect(vm.warnings.some((w) => /overrides the regular sign/.test(w.text))).toBe(false);
     expect(vm.chips.map((c) => c.key)).toEqual(["nextAllowed", "towAway"]);
     expect(vm.chips[0]!.label).toBe("Can park from 5:00 pm");
@@ -167,12 +162,46 @@ describe("buildTimelineModel", () => {
   });
 });
 
-describe("long stays", () => {
-  it("drops the 'Up to' tile when the stay is over a day", () => {
-    const { v, now, reading } = verdictFor("nsw-clearway-sandwich");
-    const long = { ...v, status: "yes" as const, maxStayMinutes: 2654, leaveBy: new Date(now + 2654 * 60_000).toISOString(), paymentRequired: false, towAwayRisk: false };
-    const vm = buildVerdictViewModel(long, reading, now);
-    expect(vm.chips.map((c) => c.key)).toEqual(["leaveBy"]);
+describe("new core semantics", () => {
+  it("uses core's shortLabel and needsSide", () => {
+    const { v, now, reading } = verdictFor("temporary-roadworks-no-stopping");
+    expect(buildVerdictViewModel(v, reading, now).heroHeadline).toBe("Temporary sign");
+    expect(verdictFor("split-sides-no-stopping-1p").v.needsSide).toBe(true);
+  });
+
+  it("no limit until the next restriction when unrestricted now", () => {
+    const { v, now, reading } = verdictFor("nsw-2p-meter-weekdays-sat");
+    const free = {
+      ...v,
+      status: "yes" as const,
+      maxStayMinutes: null,
+      leaveBy: null,
+      paymentRequired: false,
+      unrestrictedUntil: "2026-11-15T21:00:00.000Z", // 8:00 am Mon Sydney
+    };
+    const vm = buildVerdictViewModel(free, reading, now);
+    expect(vm.chips.map((c) => c.label)).toEqual(["No limit until 8:00 am Mon"]);
     expect(vm.statusQualifier).toBeNull();
+    const none = buildVerdictViewModel({ ...free, unrestrictedUntil: null }, reading, now);
+    expect(none.chips.map((c) => c.label)).toEqual(["No time limit"]);
+  });
+
+  it("holiday toggle only for core's 'not sure' question; holiday name note", () => {
+    const w = buildWarnings([
+      "Not sure if today is a public holiday — assuming the sign's restrictions apply.",
+      "It's a public holiday today — sign times still apply unless the sign says otherwise (some councils differ).",
+    ]);
+    expect(w.map((x) => x.holidayQuestion)).toEqual([true, false]);
+    const { v, now, reading } = verdictFor("nsw-2p-meter-weekdays-sat");
+    const vm = buildVerdictViewModel({ ...v, publicHolidayToday: true, publicHolidayName: "Christmas Day" }, reading, now);
+    expect(vm.holidayNote).toBe("Public holiday today: Christmas Day");
+  });
+
+  it("temporary banner relies on core: no override claim without core's warning", () => {
+    const { v, now, reading } = verdictFor("temporary-roadworks-no-stopping");
+    const notDriving = { ...v, warnings: v.warnings.filter((x) => !x.includes("overrides")) };
+    expect(buildVerdictViewModel(notDriving, reading, now).temporaryAlert).toBeNull();
+    const inForce = { ...v, warnings: ["A temporary sign is in force right now."] };
+    expect(buildVerdictViewModel(inForce, reading, now).temporaryAlert?.detail).toBe("Temporary no stopping applies right now — tow-away.");
   });
 });
