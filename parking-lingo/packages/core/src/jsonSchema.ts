@@ -39,6 +39,8 @@ function sanitize(node: unknown): unknown {
   }
   if (out.type === "object" || "properties" in out) {
     out.additionalProperties = false;
+    // Structured outputs: every property required (optional fields are nullable).
+    if (out.properties && typeof out.properties === "object") out.required = Object.keys(out.properties);
   }
   return out;
 }

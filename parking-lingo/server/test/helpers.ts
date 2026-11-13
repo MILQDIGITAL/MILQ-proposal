@@ -28,7 +28,7 @@ export function readerReturning(reading: SignReading): FakeReader {
 }
 
 export function makeApp(reader: SignReader, overrides: Partial<Config> = {}) {
-  const config = testConfig({ trustProxy: true, ...overrides });
+  const config = testConfig({ trustProxy: "xff", ...overrides });
   return createApp({ config, reader, clock: () => FIXED_NOW, log: () => {} });
 }
 

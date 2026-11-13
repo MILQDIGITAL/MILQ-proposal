@@ -1,4 +1,5 @@
 import type { SignReading } from "@parking-lingo/core";
+import type { SignFixture } from "@parking-lingo/core/fixtures";
 
 export type SupportedMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 
@@ -23,7 +24,7 @@ export interface ReadSignResult {
   /** Number of model calls made (1, or 2 after a validation retry). */
   attempts: number;
   /** Mock mode: the fixture used, and its demo context. */
-  mock?: { fixtureId: string; title: string; demoNow: string };
+  mock?: { fixtureId: string; title: string; demoNow: string; demoContext: SignFixture["demoContext"] };
   usage?: { inputTokens: number; outputTokens: number; cacheReadInputTokens: number };
 }
 

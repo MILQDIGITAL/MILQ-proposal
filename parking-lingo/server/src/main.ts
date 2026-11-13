@@ -1,11 +1,17 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { ClaudeSignReader } from "./claudeSignReader";
-import { loadConfig } from "./config";
+import { assertStartupConfig, loadConfig } from "./config";
 import { MockSignReader } from "./mockSignReader";
 import type { SignReader } from "./signReader";
 
 const config = loadConfig();
+try {
+  for (const w of assertStartupConfig(config)) console.warn(JSON.stringify({ t: new Date().toISOString(), level: "warn", msg: w }));
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
+}
 
 let reader: SignReader;
 if (config.mockVision) {

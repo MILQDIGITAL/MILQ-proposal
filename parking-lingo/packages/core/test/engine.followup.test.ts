@@ -67,7 +67,7 @@ describe("long stays", () => {
     expect(v.maxStayMinutes).toBeNull();
     expect(v.leaveBy).toBe(utc("2026-11-16T10:00:00+11:00"));
     expect(v.unrestrictedUntil).toBeNull(); // paying right now
-    expect(v.summary).toBe("No time limit until 10:00 am Mon. Pay at the meter.");
+    expect(v.summary).toBe("2P ends 12:30 pm — no limit after that. 2P from 8:00 am Mon — move by 10:00 am Mon. Pay at the meter.");
     expect(v.shortLabel).toBe("Pay to park");
   });
 
@@ -139,14 +139,22 @@ describe("timeline invariants", () => {
 });
 
 describe("holiday calendar in evaluate", () => {
-  it("Australia Day 2026 in Sydney: weekday limit lifted, named warning", () => {
-    const v = evaluate(reading([twoPMeter()]), { now: "2026-01-26T10:00:00+11:00", timeZone: "Australia/Sydney" });
+  it("Australia Day 2026 in Sydney: 'except public holidays' lifted, named warning", () => {
+    const p = twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")]);
+    const v = evaluate(reading([p]), { now: "2026-01-26T10:00:00+11:00", timeZone: "Australia/Sydney" });
     expect(v.jurisdiction).toBe("AU-NSW");
     expect(v.publicHolidayToday).toBe(true);
     expect(v.publicHolidayName).toBe("Australia Day");
     expect(v.paymentRequired).toBe(false);
     expect(v.warnings.join(" ")).toMatch(/Public holiday \(Australia Day\)/);
     expect(v.warnings.join(" ")).not.toMatch(NOT_SURE);
+  });
+
+  it("Australia Day 2026: a sign silent on holidays still applies", () => {
+    const v = evaluate(reading([twoPMeter()]), { now: "2026-01-26T10:00:00+11:00", timeZone: "Australia/Sydney" });
+    expect(v.maxStayMinutes).toBe(120);
+    expect(v.paymentRequired).toBe(true);
+    expect(v.warnings.join(" ")).toMatch(/sign times still apply unless the sign says otherwise/);
   });
 
   it("ordinary weekday with app-style 'unknown': no 'not sure' warning", () => {
@@ -165,14 +173,15 @@ describe("holiday calendar in evaluate", () => {
 
   it("calendar applies to future days in the look-ahead", () => {
     // Sunday evening before Australia Day (Mon 26 Jan 2026): the weekday 2P doesn't start Monday.
-    const v = evaluate(reading([twoPMeter()]), { now: "2026-01-25T20:00:00+11:00", timeZone: "Australia/Sydney" });
+    const p = twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")]);
+    const v = evaluate(reading([p]), { now: "2026-01-25T20:00:00+11:00", timeZone: "Australia/Sydney" });
     expect(v.leaveBy).toBe(utc("2026-01-27T10:00:00+11:00"));
     expect(v.status).toBe("yes");
   });
 
   it("context.jurisdiction beats the reading hint and the time zone", () => {
     // Melbourne Cup Day 2026 (3 Nov) is a partial (metro) holiday in VIC: stay conservative, warn.
-    const r = reading([twoPMeter()], { jurisdictionHint: "AU-NSW" });
+    const r = reading([twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")])], { jurisdictionHint: "AU-NSW" });
     const v = evaluate(r, { now: "2026-11-03T10:00:00+11:00", timeZone: "Australia/Sydney", jurisdiction: "VIC" });
     expect(v.jurisdiction).toBe("AU-VIC");
     expect(v.publicHolidayToday).toBe("unknown");
@@ -190,20 +199,23 @@ describe("holiday calendar in evaluate", () => {
 
   it("unknown jurisdiction: warn only when a panel's outcome depends on the holiday", () => {
     const noCal = { now: "2026-11-12T10:00:00Z", timeZone: "UTC" };
-    // Day-of-week restriction -> depends.
-    expect(evaluate(reading([twoPMeter()]), noCal).warnings.join(" ")).toMatch(NOT_SURE);
+    const excl = twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")]);
+    // 'except public holidays' -> depends.
+    expect(evaluate(reading([excl]), noCal).warnings.join(" ")).toMatch(NOT_SURE);
+    // Silent on holidays -> applies regardless, no warning.
+    expect(evaluate(reading([twoPMeter()]), noCal).warnings.join(" ")).not.toMatch(NOT_SURE);
     // All-times panel -> doesn't depend.
     expect(evaluate(reading([panel({ kind: "no_stopping" })]), noCal).warnings.join(" ")).not.toMatch(NOT_SURE);
     // Clearway never lifted on holidays -> doesn't depend.
     const cw = panel({ kind: "clearway", schedules: [schedule(WEEKDAYS, "06:00", "10:00")] });
     expect(evaluate(reading([cw]), { ...noCal, now: "2026-11-12T07:00:00Z" }).warnings.join(" ")).not.toMatch(NOT_SURE);
     // Weekday limit hidden under an all-day No Stopping -> outcome identical, no warning.
-    expect(evaluate(reading([panel({ kind: "no_stopping" }), twoPMeter()]), noCal).warnings.join(" ")).not.toMatch(NOT_SURE);
+    expect(evaluate(reading([panel({ kind: "no_stopping" }), excl]), noCal).warnings.join(" ")).not.toMatch(NOT_SURE);
     expect(evaluate(reading([twoPMeter()]), noCal).jurisdiction).toBeNull();
   });
 
-  it("Good Friday in Melbourne: daily 1P lifted, clearway kept", () => {
-    const onep = panel({ kind: "timed_parking", timeLimitMinutes: 60, schedules: [schedule(ALL_DAYS, "08:00", "18:00")] });
+  it("Good Friday in Melbourne: 'except public holidays' 1P lifted, clearway kept", () => {
+    const onep = panel({ kind: "timed_parking", timeLimitMinutes: 60, schedules: [schedule(ALL_DAYS, "08:00", "18:00", "excluded")] });
     const v = evaluate(reading([onep]), { now: "2026-04-03T10:00:00+11:00", timeZone: "Australia/Melbourne" });
     expect(v.publicHolidayName).toBe("Good Friday");
     expect(v.maxStayMinutes).not.toBe(60);

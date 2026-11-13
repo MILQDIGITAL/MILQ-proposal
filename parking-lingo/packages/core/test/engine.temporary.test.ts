@@ -48,7 +48,7 @@ describe("temporary signs", () => {
   it("temporary event clearway: day before shows the deadline", () => {
     const v = evaluate(event, ctx("2026-11-20T18:00:00+11:00"));
     expect(v.leaveBy).toBe(utc("2026-11-21T06:00:00+11:00"));
-    expect(v.summary).toBe("Park until 6:00 am tomorrow — temporary clearway starts.");
+    expect(v.summary).toBe("4P ends 8:00 pm — no limit after that. Park until 6:00 am tomorrow — temporary clearway starts.");
   });
 
   it("temporary event clearway: after it ends, permanent rules again", () => {

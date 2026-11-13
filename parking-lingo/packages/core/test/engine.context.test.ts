@@ -6,16 +6,24 @@ import { BNE, ctx, ev, panel, schedule, twoPMeter, utc, WEEKDAYS, ALL_DAYS } fro
 describe("public holidays", () => {
   it("unknown status: restriction applies and the user is warned", () => {
     // Broken Hill (NSW, but on Adelaide time) has no inferable jurisdiction.
-    const v = ev([twoPMeter()], "2026-11-12T09:30:00+10:30", { isPublicHoliday: "unknown", timeZone: "Australia/Broken_Hill" });
+    const p = twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")]);
+    const v = ev([p], "2026-11-12T09:30:00+10:30", { isPublicHoliday: "unknown", timeZone: "Australia/Broken_Hill" });
     expect(v.maxStayMinutes).toBe(120);
     expect(v.warnings.join(" ")).toMatch(/Not sure if today is a public holiday/);
   });
 
-  it("known holiday: unspecified weekday limit is lifted, with a double-check warning", () => {
+  it("known holiday: a sign silent on holidays still applies, with an info note", () => {
     const v = ev([twoPMeter()], "2026-11-12T10:00:00+11:00", { isPublicHoliday: true });
-    expect(v.paymentRequired).toBe(false);
-    expect(v.leaveBy).toBe(utc("2026-11-13T10:00:00+11:00"));
-    expect(v.warnings.join(" ")).toMatch(/Double-check/);
+    expect(v.paymentRequired).toBe(true);
+    expect(v.maxStayMinutes).toBe(120);
+    expect(v.warnings.join(" ")).toMatch(/public holiday today — sign times still apply/);
+  });
+
+  it("unspecified restrictions of every kind still apply on a holiday", () => {
+    for (const kind of ["loading_zone", "bus_zone", "disabled_only", "no_parking"] as const) {
+      const p = panel({ kind, schedules: [schedule(WEEKDAYS, "06:00", "18:00")] });
+      expect(ev([p], "2026-11-16T10:00:00+11:00", { isPublicHoliday: true }).status).toBe("no");
+    }
   });
 
   it("known holiday: explicit 'except public holidays' is honoured", () => {
@@ -29,7 +37,7 @@ describe("public holidays", () => {
     const cw = panel({ kind: "clearway", schedules: [schedule(WEEKDAYS, "06:00", "10:00")] });
     const v = ev([cw], "2026-11-12T07:00:00+11:00", { isPublicHoliday: true });
     expect(v.status).toBe("no");
-    expect(v.warnings.join(" ")).toMatch(/may still apply/);
+    expect(v.warnings.join(" ")).toMatch(/sign times still apply/);
   });
 
   it("'Sun & public holidays' applies on a weekday holiday", () => {
@@ -54,7 +62,8 @@ describe("public holidays", () => {
   });
 
   it("publicHolidayDates covers days other than today", () => {
-    const v = ev([twoPMeter()], "2026-11-12T20:00:00+11:00", { publicHolidayDates: ["2026-11-13"] });
+    const p = twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")]);
+    const v = ev([p], "2026-11-12T20:00:00+11:00", { publicHolidayDates: ["2026-11-13"] });
     expect(v.status).toBe("yes");
     expect(v.leaveBy).toBe(utc("2026-11-16T10:00:00+11:00"));
   });

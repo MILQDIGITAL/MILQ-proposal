@@ -32,6 +32,8 @@ export const ContextSchema = z.object({
   isPublicHoliday: z.union([z.boolean(), z.literal("unknown")]).optional(),
   publicHolidayDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(60).optional(),
   jurisdictionHint: z.string().max(32).nullable().optional(),
+  /** Jurisdiction for the public-holiday calendar, e.g. "AU-NSW" (also "NSW"). */
+  jurisdiction: z.string().max(32).nullable().optional(),
 });
 export type RequestContext = z.infer<typeof ContextSchema>;
 

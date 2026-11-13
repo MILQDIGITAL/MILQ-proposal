@@ -42,15 +42,17 @@ Core is consumed as TypeScript source with extensionless imports, so the server 
 | `PARKING_LINGO_EFFORT` | `medium` | `low`/`medium`/`high`/`xhigh`/`max`. Trade latency/cost for care. |
 | `PARKING_LINGO_REFUSAL_FALLBACK` | `1` | Server-side refusal fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`). Set `0` on platforms without it. |
 | `MOCK_VISION` | `0` | `1` = return fixtures instead of calling Claude. |
-| `PARKING_LINGO_APP_TOKEN` | unset | When set, `/v1/*` requires `x-app-token: <value>`. |
+| `PARKING_LINGO_APP_TOKEN` | unset | When set, `/v1/*` requires `x-app-token: <value>`. **Required in live mode**: the server refuses to start without it unless `ALLOW_NO_AUTH=1`. |
+| `ALLOW_NO_AUTH` | `0` | `1` = deliberately run live mode with no app token (logs a warning). |
 | `PORT` / `HOST` | `8787` / `0.0.0.0` | |
-| `TRUST_PROXY` | `0` | `1` behind Fly/Render/Railway so the per-IP limit uses `Fly-Client-IP` / `X-Forwarded-For`. |
+| `TRUST_PROXY` | `0` | Which header gives the client IP for rate limiting. `fly`: `Fly-Client-IP` (set by Fly's edge — only use on Fly). `xff`: `X-Forwarded-For`, taking the entry `TRUSTED_PROXY_HOPS` from the right (the hop your own proxy appended; left-most entries are client-controlled and never used). `0`: socket address. Legacy `1` = `xff`. |
+| `TRUSTED_PROXY_HOPS` | `1` | Number of trusted proxies in front of the server that append to `X-Forwarded-For` (Render/Railway: 1). |
 | `CORS_ORIGINS` | empty | Comma-separated origins (or `*`). Not needed for the native app. |
 | `MAX_IMAGE_BYTES` | `5242880` | Decoded image size limit (capped at Claude's 5 MB). |
 | `MAX_BODY_BYTES` | base64(image limit) + 64 KB | |
 | `READ_TIMEOUT_MS` | `60000` | Deadline for one read-sign call. |
 | `UPSTREAM_MAX_RETRIES` | `1` | SDK retries on upstream 429/5xx/network errors. |
-| `RATE_LIMIT_READ_SIGN` / `RATE_LIMIT_EVALUATE` | `20` / `120` | Per IP per window; `0` disables. In-memory (single instance). |
+| `RATE_LIMIT_READ_SIGN` / `RATE_LIMIT_EVALUATE` | `20` / `120` | Per IP per window; `0` disables. In-memory (single instance), capped at 10,000 tracked IPs (oldest evicted first). |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | |
 | `LOG_REQUESTS` | `1` | One JSON line per request (no bodies, images or secrets). |
 
@@ -73,7 +75,10 @@ All errors: `{ "error": { "code": string, "message": string, "retryAfterSeconds"
 Every response carries `x-request-id` (send your own `x-request-id` to correlate, 8–64 chars `[A-Za-z0-9._-]`).
 
 Headers the app sends: `content-type: application/json`, `x-app-token` (if the server has one),
-optionally `x-request-id`, and in mock mode optionally `x-mock-fixture: <fixture id>`.
+optionally `x-request-id`, and in mock mode optionally `x-mock-fixture: <fixture id>` and
+`x-mock-demo-time: 1` (evaluate with the fixture's full `demoContext` — its time, zone, permits,
+vehicle settings — overriding the request's, so the demo shows the intended answer even though the
+app always sends `now`).
 
 ### `POST /v1/read-sign`
 
@@ -94,7 +99,9 @@ optionally `x-request-id`, and in mock mode optionally `x-mock-fixture: <fixture
     "intendedStayMinutes": 90,
     "isPublicHoliday": "unknown",        // true | false | "unknown"
     "publicHolidayDates": ["2026-12-25"],
-    "jurisdictionHint": "AU-NSW"         // passed to the model as a hint only
+    "jurisdiction": "AU-NSW",            // holiday calendar (also "NSW"); falls back to jurisdictionHint,
+                                         // the reading's hint, then the time zone
+    "jurisdictionHint": "AU-NSW"         // passed to the model as a hint (jurisdiction is used if absent)
   }
 }
 ```
@@ -166,7 +173,8 @@ The app can also do this locally with `@parking-lingo/core`.
 
 Lists fixture ids/titles for the `x-mock-fixture` header. Without the header, read-sign cycles
 through fixtures in order. In mock mode, if the request has no `now`, the fixture's demo time is used
-so the demo answer is interesting; send `now` to override.
+so the demo answer is interesting; send `now` to override. Send `x-mock-demo-time: 1` to use the
+fixture's whole demo context even when `now` is sent.
 
 ### Error codes
 
@@ -196,8 +204,8 @@ docker build -f server/Dockerfile -t parking-lingo-server .
 docker run -p 8080:8080 -e ANTHROPIC_API_KEY=... -e PARKING_LINGO_APP_TOKEN=... parking-lingo-server
 ```
 
-**Fly.io:** `fly launch --dockerfile server/Dockerfile` from `parking-lingo/`, `fly secrets set ANTHROPIC_API_KEY=... PARKING_LINGO_APP_TOKEN=...`, internal port 8080, health check `/healthz`.
-**Render / Railway (no Docker):** root directory `parking-lingo`, build `npm ci`, start `npm start -w server`, set env vars above plus `TRUST_PROXY=1`, health check path `/healthz`.
+**Fly.io:** `fly launch --dockerfile server/Dockerfile` from `parking-lingo/`, `fly secrets set ANTHROPIC_API_KEY=... PARKING_LINGO_APP_TOKEN=...`, internal port 8080, health check `/healthz`, and `TRUST_PROXY=fly`.
+**Render / Railway (no Docker):** root directory `parking-lingo`, build `npm ci`, start `npm start -w server`, set env vars above plus `TRUST_PROXY=xff` (and `TRUSTED_PROXY_HOPS=1`), health check path `/healthz`. On Fly use `TRUST_PROXY=fly`.
 
 Notes: run a single instance (or move the rate limiter to Redis); the app token is a speed bump, not
 real auth — it ships inside the app. Add per-user auth/attestation (e.g. App Attest) before a public launch.

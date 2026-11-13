@@ -328,7 +328,7 @@ describe("misc", () => {
     const { createApp } = await import("../src/app");
     const { testConfig } = await import("../src/config");
     const app = createApp({
-      config: testConfig({ logRequests: true, trustProxy: true }),
+      config: testConfig({ logRequests: true, trustProxy: "xff" }),
       reader: readerReturning(twoPMeter),
       log: (e) => lines.push(JSON.stringify(e)),
     });

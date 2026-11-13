@@ -60,7 +60,11 @@ export function panelLabel(p: SignPanel): string {
     }
     if (p.payment !== "none") base += ` ${PAYMENT_LABEL[p.payment]}`;
   }
-  if (p.temporary) base = `Temporary ${base.charAt(0).toLowerCase()}${base.slice(1)}`;
+  if (p.temporary) {
+    // Keep sign codes like "P", "2P", "1/4P", "EV" in capitals.
+    const keepCase = /^[A-Z0-9/]+\b/.test(base) && !/^[A-Z][a-z]/.test(base);
+    base = `Temporary ${keepCase ? base : base.charAt(0).toLowerCase() + base.slice(1)}`;
+  }
   return base;
 }
 

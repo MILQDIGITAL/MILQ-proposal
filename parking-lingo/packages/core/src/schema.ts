@@ -51,6 +51,24 @@ export const PaymentMethodSchema = z
   );
 export type PaymentMethod = z.infer<typeof PaymentMethodSchema>;
 
+export const VEHICLE_CLASSES = [
+  "car",
+  "motorcycle",
+  "commercial",
+  "truck",
+  "bus",
+  "taxi",
+  "authorised",
+  "other",
+] as const;
+export const VehicleClassSchema = z
+  .enum(VEHICLE_CLASSES)
+  .describe(
+    "car = motor cars; commercial = goods/delivery vehicles; authorised = 'authorised vehicles only' " +
+      "(council, police, emergency, permit-holding service vehicles); other = anything else (e.g. caravans).",
+  );
+export type VehicleClass = z.infer<typeof VehicleClassSchema>;
+
 export const ARROWS = ["left", "right", "both", "none"] as const;
 export const ArrowSchema = z
   .enum(ARROWS)
@@ -134,6 +152,15 @@ export const SignPanelSchema = z
       .string()
       .nullable()
       .describe("Free text vehicle note if any, e.g. 'Buses excepted', 'Motor cars only', 'Goods vehicles'."),
+    allowedVehicles: z
+      .array(VehicleClassSchema)
+      .nullable()
+      .optional()
+      .describe(
+        "ONLY when the panel restricts itself to certain vehicles ('Motor cars only', 'Authorised vehicles only', " +
+          "'Buses only'): the classes allowed. null when there is no such 'only' wording — in particular " +
+          "'... excepted' notes are NOT 'only' restrictions (keep those in vehicleRestriction only).",
+      ),
     schedules: z
       .array(ScheduleSchema)
       .describe("When the panel applies. EMPTY ARRAY means it applies at all times (24/7, 'Anytime')."),

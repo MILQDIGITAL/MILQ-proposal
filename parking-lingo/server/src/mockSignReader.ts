@@ -29,7 +29,12 @@ export class MockSignReader implements SignReader {
       reading: structuredClone(fixture.reading),
       model: "mock",
       attempts: 1,
-      mock: { fixtureId: fixture.id, title: fixture.title, demoNow: String(fixture.demoContext.now) },
+      mock: {
+        fixtureId: fixture.id,
+        title: fixture.title,
+        demoNow: String(fixture.demoContext.now),
+        demoContext: structuredClone(fixture.demoContext),
+      },
     };
   }
 }

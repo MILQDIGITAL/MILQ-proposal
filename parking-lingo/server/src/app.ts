@@ -63,7 +63,7 @@ export function createApp(deps: AppDeps) {
       "*",
       cors({
         origin: config.corsOrigins.includes("*") ? "*" : config.corsOrigins,
-        allowHeaders: ["content-type", "x-app-token", "x-request-id", "x-mock-fixture"],
+        allowHeaders: ["content-type", "x-app-token", "x-request-id", "x-mock-fixture", "x-mock-demo-time"],
         allowMethods: ["GET", "POST", "OPTIONS"],
         exposeHeaders: ["x-request-id", "retry-after"],
         maxAge: 600,
@@ -107,7 +107,7 @@ export function createApp(deps: AppDeps) {
 
   const limit = (limiter: RateLimiter) => async (c: Context<Env>, next: () => Promise<void>) => {
     if (limiter.limit > 0) {
-      const r = limiter.hit(clientIp(c, config.trustProxy));
+      const r = limiter.hit(clientIp(c, config.trustProxy, config.trustedProxyHops));
       c.header("x-ratelimit-limit", String(limiter.limit));
       c.header("x-ratelimit-remaining", String(r.remaining));
       if (!r.allowed) {
@@ -134,13 +134,14 @@ export function createApp(deps: AppDeps) {
     const checked = checkImage(image, config.maxImageBytes);
     const now = context.now !== undefined ? new Date(context.now) : clock();
     const mockFixtureId = config.mockVision ? c.req.header("x-mock-fixture")?.trim() || null : null;
+    const useDemoContext = config.mockVision && isTruthyHeader(c.req.header("x-mock-demo-time"));
 
     const result = await withDeadline(config.readTimeoutMs, c.req.raw.signal, (signal) =>
       reader.read({
         image: { base64: checked.base64, mediaType: checked.mediaType },
         now,
         timeZone: context.timeZone,
-        jurisdictionHint: context.jurisdictionHint ?? null,
+        jurisdictionHint: context.jurisdictionHint ?? context.jurisdiction ?? null,
         mockFixtureId,
         signal,
       }),
@@ -154,8 +155,16 @@ export function createApp(deps: AppDeps) {
     });
 
     // Mock mode without an explicit `now`: use the fixture's demo time so the demo is interesting.
-    const evalNow = context.now === undefined && result.mock ? new Date(result.mock.demoNow) : now;
-    const verdict = runEvaluate(result.reading, toParkingContext(context, evalNow));
+    // With `x-mock-demo-time: 1`, use the fixture's whole demo context (time, zone, permits, ...)
+    // even when the app sends `now`.
+    let evalContext: ParkingContext;
+    if (useDemoContext && result.mock) {
+      evalContext = { ...toParkingContext(context, now), ...result.mock.demoContext };
+    } else {
+      const evalNow = context.now === undefined && result.mock ? new Date(result.mock.demoNow) : now;
+      evalContext = toParkingContext(context, evalNow);
+    }
+    const verdict = runEvaluate(result.reading, evalContext);
     c.header("cache-control", "no-store");
     return c.json({
       reading: result.reading,
@@ -211,9 +220,15 @@ async function readJson(c: Context<Env>): Promise<unknown> {
 }
 
 function toParkingContext(ctx: RequestContext, now: Date): ParkingContext {
-  // jurisdictionHint goes to the model only; everything else maps 1:1 onto ParkingContext.
-  const { jurisdictionHint: _hint, now: _now, ...rest } = ctx;
-  return { ...rest, now };
+  // jurisdiction (or, failing that, the device's jurisdictionHint) selects the holiday calendar.
+  const { jurisdictionHint, jurisdiction, now: _now, ...rest } = ctx;
+  const j = jurisdiction ?? jurisdictionHint ?? null;
+  return { ...rest, now, ...(j ? { jurisdiction: j } : {}) };
+}
+
+function isTruthyHeader(v: string | undefined): boolean {
+  const s = v?.trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes";
 }
 
 function runEvaluate(reading: Parameters<typeof evaluate>[0], ctx: ParkingContext) {
@@ -232,15 +247,34 @@ function tokenMatches(given: string | undefined, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-function clientIp(c: Context<Env>, trustProxy: boolean): string {
-  if (trustProxy) {
-    const fly = c.req.header("fly-client-ip");
-    if (fly) return fly.trim();
-    const xff = c.req.header("x-forwarded-for");
-    if (xff) return xff.split(",")[0]!.trim();
-    const real = c.req.header("x-real-ip");
-    if (real) return real.trim();
+/**
+ * Client IP for rate limiting. Only the header the configured platform controls is
+ * trusted; for X-Forwarded-For the entry `hops` from the right is used (the hop our
+ * own proxy appended), never the client-supplied left-most entries.
+ */
+export function clientIpFromHeaders(
+  header: (name: string) => string | undefined,
+  trustProxy: Config["trustProxy"],
+  hops: number,
+): string | null {
+  if (trustProxy === "fly") {
+    const fly = header("fly-client-ip")?.trim();
+    return fly || null;
   }
+  if (trustProxy === "xff") {
+    const parts = (header("x-forwarded-for") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return null;
+    return parts[Math.max(0, parts.length - hops)]!;
+  }
+  return null;
+}
+
+function clientIp(c: Context<Env>, trustProxy: Config["trustProxy"], hops: number): string {
+  const fromHeader = clientIpFromHeaders((n) => c.req.header(n), trustProxy, hops);
+  if (fromHeader) return fromHeader;
   try {
     return getConnInfo(c).remote.address ?? "unknown";
   } catch {

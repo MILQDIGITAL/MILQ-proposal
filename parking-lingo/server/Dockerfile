@@ -18,7 +18,8 @@ COPY server/tsconfig.json server/
 
 USER node
 WORKDIR /srv/server
-ENV PORT=8080 HOST=0.0.0.0 TRUST_PROXY=1
+# Behind one proxy appending X-Forwarded-For; on Fly override with TRUST_PROXY=fly.
+ENV PORT=8080 HOST=0.0.0.0 TRUST_PROXY=xff TRUSTED_PROXY_HOPS=1
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "--import", "tsx", "src/main.ts"]
