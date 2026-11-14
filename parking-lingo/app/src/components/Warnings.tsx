@@ -1,12 +1,12 @@
 import type { UpcomingRestriction } from "@parking-lingo/core";
 import { formatInstant } from "@parking-lingo/core";
 import { Pressable, StyleSheet, View } from "react-native";
-import type { TemporaryAlert, WarningItem, WarningKind } from "../logic/viewModel";
+import type { SpecialUnsure, TemporaryAlert, WarningItem, WarningKind } from "../logic/viewModel";
 import { radius, space, usePalette } from "../theme";
 import { AppText, Icon } from "./ui";
 
 /** Yellow/black roadworks-style stripe, so temporary signs look like temporary signs. */
-function HazardStripe({ color, height = 10 }: { color: string; height?: number }) {
+export function HazardStripe({ color, height = 10 }: { color: string; height?: number }) {
   return (
     <View style={[styles.stripe, { height }]} accessible={false} importantForAccessibility="no-hide-descendants">
       {Array.from({ length: 40 }).map((_, i) => (
@@ -40,6 +40,47 @@ export function TemporaryBanner({ alert }: { alert: TemporaryAlert }) {
         </View>
       </View>
       <HazardStripe color={t.stripe} />
+    </View>
+  );
+}
+
+/** "Read the temporary sign" / "Check the vehicle note": the user must read part of the sign. */
+export function SpecialUnsureCard({ special }: { special: SpecialUnsure }) {
+  const p = usePalette();
+  const temp = special.kind === "temporary_dates";
+  const fill = temp ? p.temporary.fill : p.surface;
+  const ink = temp ? p.temporary.onFill : p.text;
+  return (
+    <View
+      style={[styles.temp, { backgroundColor: fill, borderColor: temp ? p.temporary.stripe : p.tone.unsure.fill }]}
+      accessible
+      accessibilityRole="alert"
+      accessibilityLabel={`${special.title}. ${special.quote ? `The sign says: ${special.quote}. ` : ""}${special.detail}`}
+      testID={`special-${special.kind}`}
+    >
+      {temp ? <HazardStripe color={p.temporary.stripe} /> : null}
+      <View style={[styles.tempBody, { alignItems: "flex-start" }]}>
+        <Icon name={temp ? "construct" : "car-outline"} size={34} color={ink} />
+        <View style={{ flex: 1, gap: space.sm }}>
+          <AppText variant="headline" color={ink} style={styles.tempTitle}>
+            {special.title.toUpperCase()}
+          </AppText>
+          {special.quote ? (
+            <View style={[styles.quote, { backgroundColor: temp ? "#FFFFFF" : p.tone.unsure.soft, borderColor: temp ? p.temporary.stripe : p.tone.unsure.fill }]}>
+              <AppText variant="footnote" color={temp ? "#333333" : p.tone.unsure.onSoft} style={{ fontWeight: "800", letterSpacing: 0.6 }}>
+                {temp ? "TEMPORARY SIGN AS READ" : "THE SIGN SAYS"}
+              </AppText>
+              <AppText color={temp ? "#111111" : p.text} style={styles.quoteText}>
+                “{special.quote}”
+              </AppText>
+            </View>
+          ) : null}
+          <AppText variant="body" color={ink} style={{ fontWeight: "600" }}>
+            {special.detail}
+          </AppText>
+        </View>
+      </View>
+      {temp ? <HazardStripe color={p.temporary.stripe} /> : null}
     </View>
   );
 }
@@ -152,6 +193,8 @@ const styles = StyleSheet.create({
   tempTitle: { fontWeight: "900", letterSpacing: 0.6 },
   stripe: { flexDirection: "row", overflow: "hidden", gap: 10, alignItems: "center" },
   stripeBar: { width: 10, transform: [{ rotate: "35deg" }] },
+  quote: { borderWidth: 2, borderRadius: radius.sm, padding: space.sm, gap: 2 },
+  quoteText: { fontSize: 19, lineHeight: 25, fontWeight: "800" },
   warning: { borderRadius: radius.md, padding: space.md, gap: space.sm },
   warningRow: { flexDirection: "row", gap: space.md, alignItems: "flex-start" },
   holidayRow: { flexDirection: "row", gap: space.sm, paddingLeft: 36 },

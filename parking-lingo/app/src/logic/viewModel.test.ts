@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { buildContext, DEFAULT_SETTINGS } from "../state/settings";
 import { countdownText, formatCountdown, shortHourLabel } from "./format";
 import { buildTimelineModel } from "./timeline";
-import { buildVerdictViewModel, buildWarnings, classifyWarning, dependsOnSide, toneFor } from "./viewModel";
+import { devFixturesById } from "../dev/devFixtures";
+import { buildVerdictViewModel, buildWarnings, classifyWarning, dependsOnSide, holidayCalendarLine, isHolidayQuestion, toneFor } from "./viewModel";
 
 function verdictFor(id: string, extra: Parameters<typeof buildContext>[1] extends infer T ? Partial<T> : never = {}): { v: Verdict; now: number; reading: ReturnType<typeof getFixture>["reading"] } {
   const f = getFixture(id);
@@ -203,5 +204,63 @@ describe("new core semantics", () => {
     expect(buildVerdictViewModel(notDriving, reading, now).temporaryAlert).toBeNull();
     const inForce = { ...v, warnings: ["A temporary sign is in force right now."] };
     expect(buildVerdictViewModel(inForce, reading, now).temporaryAlert?.detail).toBe("Temporary no stopping applies right now — tow-away.");
+  });
+});
+
+describe("read-the-sign unsure states and holiday calendar", () => {
+  const evalDev = (id: string) => {
+    const f = devFixturesById[id]!;
+    const v = evaluate(f.reading, buildContext(DEFAULT_SETTINGS, { now: f.demoContext.now, timeZone: f.demoContext.timeZone }));
+    return { v, reading: f.reading, now: Date.parse(f.demoContext.now as string) };
+  };
+
+  it("unclear temporary dates get the temporary tone and a read-the-sign card, not an 'overrides' banner", () => {
+    const { v, reading, now } = evalDev("dev-temporary-dates-unclear");
+    expect(v.shortLabel).toBe("Check temporary sign");
+    const vm = buildVerdictViewModel(v, reading, now);
+    expect(vm.tone).toBe("temporary");
+    expect(vm.statusWord).toBe("CHECK SIGN");
+    expect(vm.special?.kind).toBe("temporary_dates");
+    expect(vm.special?.title).toBe("Read the temporary sign");
+    expect(vm.special?.quote).toContain("ROAD WORK");
+    expect(vm.temporaryAlert).toBeNull();
+    expect(vm.showDetails).toBe(false);
+    expect(vm.warnings.some((w) => /overrides the regular sign/.test(w.text))).toBe(false);
+    expect(vm.chips).toEqual([]);
+  });
+
+  it("unclear vehicle wording shows the sign's vehicle note", () => {
+    const { v, reading, now } = evalDev("dev-vehicle-note-unclear");
+    const vm = buildVerdictViewModel(v, reading, now);
+    expect(vm.tone).toBe("unsure");
+    expect(vm.special).toMatchObject({ kind: "vehicle_note", quote: "Except buses, cars only" });
+    expect(vm.statusWord).toBe("CHECK SIGN");
+  });
+
+  it("blurry stays the generic unsure state", () => {
+    const { v, now, reading } = verdictFor("blurry-low-confidence");
+    expect(buildVerdictViewModel(v, reading, now).special).toBeNull();
+  });
+
+  it("calendar line covers conflict, unknown jurisdiction and unknown status", () => {
+    const { v, reading } = evalDev("dev-jurisdiction-conflict");
+    expect(v.jurisdictionSource).toBe("conflict");
+    expect(holidayCalendarLine(v, reading)).toMatch(/looks like VIC, but this phone's time zone suggests NSW/);
+    expect(holidayCalendarLine({ jurisdiction: null, jurisdictionSource: null, publicHolidayToday: "unknown" }, null)).toMatch(/^State unknown.*unclear/);
+    expect(holidayCalendarLine({ jurisdiction: "AU-QLD", jurisdictionSource: "reading", publicHolidayToday: false }, null)).toBe(
+      "Public holidays: QLD calendar (from the sign). Local and regional holidays aren't included.",
+    );
+  });
+
+  it("holiday toggle is offered for the local/regional and partial-state caveats too", () => {
+    expect(isHolidayQuestion("Local and regional public holidays aren't known to the app — if today is one, the 2P times apply.")).toBe(true);
+    expect(isHolidayQuestion("Melbourne Cup Day is a public holiday in only part of the state — assuming the sign's restrictions apply. Check locally.")).toBe(true);
+    expect(isHolidayQuestion("It's a public holiday today — sign times still apply unless the sign says otherwise (some councils differ).")).toBe(false);
+  });
+
+  it("'no' verdicts never get leave-by/stay tiles", () => {
+    const { v, now, reading } = verdictFor("school-no-parking");
+    expect(v.leaveBy).toBeNull();
+    expect(buildVerdictViewModel(v, reading, now).chips.map((c) => c.key)).toEqual(["nextAllowed"]);
   });
 });

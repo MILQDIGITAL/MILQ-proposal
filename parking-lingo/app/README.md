@@ -33,8 +33,9 @@ npx expo start --web                     # browser preview (no live camera: phot
 src/app/          routes: index (Scan), analysing, result, settings, demo, history
 src/api/          client.ts (fetch + timeout/abort), errors.ts (typed AppError + friendly copy)
 src/state/        settings (+ → context), history, scanStore (current scan), AppProviders (AsyncStorage)
-src/logic/        pure view logic: viewModel (verdict → hero/chips/warnings), timeline, reminder, format
-src/components/   VerdictHero, FactChips, SideSelector, TimelineBar, Warnings, EvidenceSection, SignPlate
+src/logic/        pure view logic: viewModel (verdict → hero/chips/warnings), resolveVerdict, intlCheck, timeline, reminder, format
+src/components/   VerdictHero, FactChips, SideSelector, TimelineBar, Warnings (+ SpecialUnsureCard), EvidenceSection, SignPlate
+src/dev/          extra demo readings (tests + dev-only deep links)
 src/lib/          device glue: photo (resize/JPEG), notifications, haptics + time zone
 src/theme/        tokens (light/dark, verdict tones, type scale, 44 pt touch targets)
 scripts/          make-icons.js, screenshots.js, e2e-scan.js (Playwright)
@@ -56,6 +57,18 @@ docs/screenshots/ iPhone-size (390×844 @2x) renders of the result screen in dem
   (`src/logic/resolveVerdict.ts`). Dev: `/result?fixture=<id>&intl=fail` simulates the failure.
 - `EXPO_PUBLIC_MOCK_DEMO_TIME=1` (with the server in mock mode) sends `x-mock-demo-time: 1` and runs
   the result on the fixture's demo clock.
+- Display semantics come from core: `needsSide` (side picker), `shortLabel` (hero line),
+  `maxStayMinutes` / `leaveBy` / `unrestrictedUntil` (tiles, incl. "No limit until …"), and core's
+  warnings for the temporary-sign banner ("overrides the regular sign" only when core says so).
+- "Read the sign" unsure states get their own treatment instead of "move closer and rescan":
+  "Check temporary sign" (unclear temporary dates) → yellow/black hero + the temporary panel as
+  read; unclear vehicle wording → the sign's vehicle note quoted prominently.
+- Public holidays: core's calendar (jurisdiction from context → sign → time zone). The inline
+  holiday toggle appears only on core's "not sure / partial-state / local holidays" caveats (with
+  Undo); a named holiday shows as a note; "How we read the sign" states which calendar was used,
+  including the sign-vs-time-zone conflict case.
+- Dev-only extra readings for states with no core fixture: `src/dev/devFixtures.ts`
+  (`/result?fixture=dev-temporary-dates-unclear`, `dev-vehicle-note-unclear`, `dev-jurisdiction-conflict`).
 - Reminder permission is only requested when the user taps "Set a reminder".
 
 ## Checks

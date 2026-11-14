@@ -47,7 +47,17 @@ export interface TemporaryAlert {
   detail: string;
 }
 
+/** Unsure answers that need the user to read a specific part of the sign (not "rescan"). */
+export interface SpecialUnsure {
+  kind: "temporary_dates" | "vehicle_note";
+  title: string;
+  detail: string;
+  /** Text to show prominently: the temporary panel as read, or the sign's vehicle note. */
+  quote: string | null;
+}
+
 export interface VerdictViewModel {
+  special: SpecialUnsure | null;
   tone: Tone;
   /** Short uppercase word shown with the icon: "YES", "NO", "NOT SURE"... */
   statusWord: string;
@@ -90,6 +100,7 @@ const TONE_META: Record<Tone, { word: string; qualifier: string | null; icon: st
   conditional: { word: "YES", qualifier: "Conditions apply", icon: "alert-circle", haptic: "warning" },
   no: { word: "NO", qualifier: "Don't park here", icon: "close-circle", haptic: "error" },
   unsure: { word: "NOT SURE", qualifier: "Check the sign yourself", icon: "help-circle", haptic: "warning" },
+  temporary: { word: "CHECK SIGN", qualifier: "Read the temporary sign", icon: "construct", haptic: "warning" },
   side: { word: "IT DEPENDS", qualifier: "on which side of the pole you park", icon: "swap-horizontal", haptic: "warning" },
 };
 
@@ -116,6 +127,27 @@ export function classifyWarning(text: string): WarningKind {
 
 const WARNING_ORDER: Record<WarningKind, number> = { temporary: 0, tow: 1, legibility: 2, general: 3, holiday: 4 };
 
+/** Warnings where the user's own knowledge of today's holiday status settles it. */
+export function isHolidayQuestion(text: string): boolean {
+  return (
+    /^not sure if .* public holiday/i.test(text) ||
+    /public holiday in only part of the state/i.test(text) ||
+    /local and regional public holidays aren't known/i.test(text)
+  );
+}
+
+/** One line for "How we read the sign" about which public-holiday calendar was used. */
+export function holidayCalendarLine(v: Pick<Verdict, "jurisdiction" | "jurisdictionSource" | "publicHolidayToday">, reading: SignReading | null): string {
+  const st = (j: string | null | undefined) => (j ?? "").replace(/^AU-/, "");
+  const unknownToday = v.publicHolidayToday === "unknown" ? " Today's holiday status is unclear, so the sign's restrictions are assumed to apply." : "";
+  if (!v.jurisdiction) return `State unknown — public holidays couldn't be checked; restrictions are assumed to apply.${unknownToday}`;
+  if (v.jurisdictionSource === "conflict") {
+    return `The sign looks like ${st(reading?.jurisdictionHint) || "another state"}, but this phone's time zone suggests ${st(v.jurisdiction)} — holidays in only one of them are treated as uncertain (restrictions apply).${unknownToday}`;
+  }
+  const how = v.jurisdictionSource === "context" ? "set for this scan" : v.jurisdictionSource === "reading" ? "from the sign" : "from your time zone";
+  return `Public holidays: ${st(v.jurisdiction)} calendar (${how}). Local and regional holidays aren't included.${unknownToday}`;
+}
+
 export function buildWarnings(warnings: readonly string[]): WarningItem[] {
   const seen = new Set<string>();
   return warnings
@@ -124,7 +156,7 @@ export function buildWarnings(warnings: readonly string[]): WarningItem[] {
       seen.add(w);
       return true;
     })
-    .map((text) => ({ kind: classifyWarning(text), text, holidayQuestion: /^not sure if .* public holiday/i.test(text) }))
+    .map((text) => ({ kind: classifyWarning(text), text, holidayQuestion: isHolidayQuestion(text) }))
     .sort((a, b) => WARNING_ORDER[a.kind] - WARNING_ORDER[b.kind]);
 }
 
@@ -228,14 +260,43 @@ export function buildChips(v: SideVerdict, nowMs: number, timeZone: string): Fac
   return chips;
 }
 
+export const CHECK_TEMPORARY_LABEL = "Check temporary sign";
+
+/** Detect core's "read the sign" unsure states: unclear temporary-sign dates, unclear vehicle wording. */
+export function buildSpecialUnsure(v: SideVerdict, reading: SignReading | null): SpecialUnsure | null {
+  if (v.status !== "unsure") return null;
+  if (v.shortLabel === CHECK_TEMPORARY_LABEL || v.headline === CHECK_TEMPORARY_LABEL) {
+    const temp = reading?.panels.filter((p) => p.temporary) ?? [];
+    return {
+      kind: "temporary_dates",
+      title: "Read the temporary sign",
+      detail: "Its dates are unclear, so we can't tell if it applies today. If it does, it overrides the regular sign — follow it.",
+      quote: temp.length ? temp.map((p) => p.rawText).filter(Boolean).join("  ·  ") : null,
+    };
+  }
+  const note = reading?.panels.map((p) => p.vehicleRestriction).find((n): n is string => !!n && v.summary.includes(`"${n}"`));
+  if (note) {
+    return {
+      kind: "vehicle_note",
+      title: "Check the vehicle note",
+      detail: "The sign limits which vehicles may park here and we couldn't match it to yours. Read it before parking.",
+      quote: note,
+    };
+  }
+  return null;
+}
+
 export function buildVerdictViewModel(v: Verdict, reading: SignReading | null, nowMs: number): VerdictViewModel {
-  const tone = toneFor(v.status, dependsOnSide(v));
+  const special0 = v.status === "unsure" ? buildSpecialUnsure(v, reading) : null;
+  const tone = special0?.kind === "temporary_dates" ? "temporary" : toneFor(v.status, dependsOnSide(v));
   const meta = TONE_META[tone];
   const chips = buildChips(v, nowMs, v.timeZone);
-  const temporaryAlert = buildTemporaryAlert(v, reading, nowMs, v.timeZone);
+  // For unclear temporary dates, the special card replaces the "overrides" banner (it may not apply).
+  const temporaryAlert = special0?.kind === "temporary_dates" ? null : buildTemporaryAlert(v, reading, nowMs, v.timeZone);
   let warnings = buildWarnings(v.warnings);
+  const special = special0;
   // The banner already says this; don't repeat it in the list.
-  if (temporaryAlert?.state === "active") warnings = warnings.filter((w) => w.text !== OVERRIDE_WARNING && w.text !== TEMP_ACTIVE_WARNING);
+  if (temporaryAlert?.state === "active" || special) warnings = warnings.filter((w) => w.text !== OVERRIDE_WARNING && w.text !== TEMP_ACTIVE_WARNING);
   const a11yParts = [`${meta.word.toLowerCase()}. ${v.headline}.`, v.summary];
   for (const c of chips) {
     if (c.countdownTo) {
@@ -246,14 +307,16 @@ export function buildVerdictViewModel(v: Verdict, reading: SignReading | null, n
     }
   }
   return {
+    special,
     tone,
-    statusWord: meta.word,
-    statusQualifier: meta.qualifier,
-    icon: meta.icon,
+    statusWord: special?.kind === "vehicle_note" ? "CHECK SIGN" : meta.word,
+    statusQualifier: special?.kind === "vehicle_note" ? "Read the vehicle note" : meta.qualifier,
+    icon: special?.kind === "vehicle_note" ? "car-outline" : meta.icon,
     headline: v.headline,
     heroHeadline: v.shortLabel,
     holidayNote: v.publicHolidayToday === true ? `Public holiday today${v.publicHolidayName ? `: ${v.publicHolidayName}` : ""}` : null,
-    showDetails: tone !== "side",
+    // The side picker or the read-the-sign card says it better than a repeated headline.
+    showDetails: tone !== "side" && !special,
     summary: v.summary,
     chips,
     warnings,

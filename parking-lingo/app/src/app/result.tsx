@@ -5,25 +5,31 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { devFixturesById } from "../dev/devFixtures";
 import { EvidenceSection } from "../components/EvidenceSection";
 import { FactChips } from "../components/FactChips";
 import { SideSelector } from "../components/SideSelector";
 import { TimelineBar } from "../components/TimelineBar";
 import { AppText, Button, Card, Icon, IconButton, SectionTitle } from "../components/ui";
 import { VerdictHero } from "../components/VerdictHero";
-import { TemporaryBanner, UpcomingTemporaryList, WarningsList } from "../components/Warnings";
+import { SpecialUnsureCard, TemporaryBanner, UpcomingTemporaryList, WarningsList } from "../components/Warnings";
 import { useNow } from "../hooks/useNow";
 import { getDeviceTimeZone, verdictHaptic } from "../lib/device";
 import { cancelReminder, scheduleLeaveReminder } from "../lib/notifications";
 import { intlSupport } from "../logic/intlCheck";
 import { planReminder } from "../logic/reminder";
 import { resolveVerdict } from "../logic/resolveVerdict";
-import { buildVerdictViewModel, dependsOnSide } from "../logic/viewModel";
+import { buildVerdictViewModel, dependsOnSide, holidayCalendarLine } from "../logic/viewModel";
 import { useSettings } from "../state/AppProviders";
 import { buildContext } from "../state/settings";
 import { demoResult } from "../state/sessions";
 import { scanStore, useScanState } from "../state/scanStore";
 import { radius, space, usePalette } from "../theme";
+
+/** Core fixtures, plus extra dev-only readings for states core doesn't ship a fixture for. */
+function lookupFixture(id: string) {
+  return fixturesById[id] ?? (__DEV__ ? devFixturesById[id] : undefined);
+}
 
 export default function ResultScreen() {
   const params = useLocalSearchParams<{ fixture?: string; clock?: string; intl?: string }>();
@@ -31,7 +37,7 @@ export default function ResultScreen() {
 
   // Deep link / web review: /result?fixture=<id>[&clock=now]
   useEffect(() => {
-    const f = params.fixture ? fixturesById[params.fixture] : undefined;
+    const f = params.fixture ? lookupFixture(params.fixture) : undefined;
     if (f && result?.fixtureId !== f.id) {
       scanStore.setResult(demoResult(f, params.clock !== "now", undefined, getDeviceTimeZone()));
     } else if (!f && !result) {
@@ -118,7 +124,7 @@ function ResultView({ simulateIntlFailure = false }: { simulateIntlFailure?: boo
   const tz = result.timeZone;
   const showSides = base.bySide !== null && (dependsOnSide(base) || side !== "unknown");
   const leaveBy = shown.status === "yes" || shown.status === "yes_with_conditions" ? shown.leaveBy : null;
-  const fixture = result.fixtureId ? fixturesById[result.fixtureId] : undefined;
+  const fixture = result.fixtureId ? lookupFixture(result.fixtureId) : undefined;
   const local = new Intl.DateTimeFormat("en-AU", { timeZone: tz, hour: "numeric", minute: "2-digit", weekday: "short", hour12: true }).format(new Date(nowMs));
 
   const rescan = () => {
@@ -200,6 +206,8 @@ function ResultView({ simulateIntlFailure = false }: { simulateIntlFailure?: boo
           <SideSelector bySide={base.bySide} reading={result.reading} selected={side} onSelect={setSide} nowMs={nowMs} timeZone={tz} />
         ) : null}
 
+        {vm.special ? <SpecialUnsureCard special={vm.special} /> : null}
+
         {vm.holidayNote ? (
           <View style={[styles.notice, { backgroundColor: p.tone.side.soft, borderColor: p.tone.side.fill }]} testID="holiday-note">
             <Icon name="calendar" size={20} color={p.tone.side.onSoft} />
@@ -256,7 +264,7 @@ function ResultView({ simulateIntlFailure = false }: { simulateIntlFailure?: boo
           photoUri={result.photoUri}
           nowMs={nowMs}
           timeZone={tz}
-          jurisdiction={shown.jurisdiction}
+          calendarLine={holidayCalendarLine(shown, result.reading)}
         />
       </ScrollView>
 

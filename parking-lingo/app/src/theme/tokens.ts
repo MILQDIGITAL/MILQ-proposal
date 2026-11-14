@@ -3,7 +3,8 @@
  * with text that clears WCAG AA (≥ 4.5:1) — amber uses near-black text, the others white.
  * Colour is never the only signal: every tone also has an icon and a word.
  */
-export type Tone = "yes" | "conditional" | "no" | "unsure" | "side";
+/** "temporary" = unsure because a temporary sign must be read (roadworks/clearway safety case). */
+export type Tone = "yes" | "conditional" | "no" | "unsure" | "side" | "temporary";
 
 export interface ToneColors {
   /** Solid fill for the hero. */
@@ -41,6 +42,7 @@ const verdictTones: Record<Tone, ToneColors> = {
   no: { fill: "#C8102E", onFill: "#FFFFFF", soft: "#FCE4E7", onSoft: "#9A0B22" },
   unsure: { fill: "#46607E", onFill: "#FFFFFF", soft: "#E5ECF4", onSoft: "#2E4560" },
   side: { fill: "#1F4FD1", onFill: "#FFFFFF", soft: "#E3EAFD", onSoft: "#173D9F" },
+  temporary: { fill: "#FFD200", onFill: "#111111", soft: "#FFF6C2", onSoft: "#5C4A00" },
 };
 
 export const light: Palette = {
@@ -79,6 +81,7 @@ export const dark: Palette = {
     no: { fill: "#D3132F", onFill: "#FFFFFF", soft: "#3A1016", onSoft: "#FF9AA8" },
     unsure: { fill: "#4D6888", onFill: "#FFFFFF", soft: "#1A2738", onSoft: "#A9C1DE" },
     side: { fill: "#2B5BE0", onFill: "#FFFFFF", soft: "#152349", onSoft: "#A9BEFF" },
+    temporary: { fill: "#FFD200", onFill: "#111111", soft: "#332B05", onSoft: "#FFE36B" },
   },
   temporary: { fill: "#FFD200", onFill: "#111111", stripe: "#111111" },
   timeline: { allowed: "#14A057", limited: "#FFB81C", prohibited: "#E0243F", track: "#2A3546" },

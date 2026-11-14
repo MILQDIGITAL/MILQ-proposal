@@ -28,7 +28,7 @@ export function EvidenceSection({
   photoUri,
   nowMs,
   timeZone,
-  jurisdiction = null,
+  calendarLine = null,
   initiallyOpen = false,
 }: {
   reading: SignReading;
@@ -37,8 +37,8 @@ export function EvidenceSection({
   photoUri: string | null;
   nowMs: number;
   timeZone: string;
-  /** e.g. "AU-NSW" — whose public-holiday calendar was used. */
-  jurisdiction?: string | null;
+  /** Which public-holiday calendar was used (see holidayCalendarLine). */
+  calendarLine?: string | null;
   initiallyOpen?: boolean;
 }) {
   const p = usePalette();
@@ -133,9 +133,7 @@ export function EvidenceSection({
             );
           })}
           <AppText variant="footnote" muted>
-            {jurisdiction
-              ? `Public holidays: ${jurisdiction.replace(/^AU-/, "")} calendar (signed times apply on holidays unless the sign says otherwise).`
-              : "State unknown — public holidays couldn't be checked."}
+            {calendarLine}
           </AppText>
           {reading.legibilityIssues.length ? (
             <AppText variant="footnote" muted>

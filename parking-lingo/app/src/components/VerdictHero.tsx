@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 import type { VerdictViewModel } from "../logic/viewModel";
 import { radius, space, usePalette } from "../theme";
 import { AppText, Icon } from "./ui";
+import { HazardStripe } from "./Warnings";
 
 /** The giant, colour-coded answer. Icon + word + headline, so colour is never the only cue. */
 export function VerdictHero({ vm, sideLabel }: { vm: VerdictViewModel; sideLabel?: string | null }) {
@@ -16,6 +17,11 @@ export function VerdictHero({ vm, sideLabel }: { vm: VerdictViewModel; sideLabel
       accessibilityLiveRegion="polite"
       testID="verdict-hero"
     >
+      {vm.tone === "temporary" ? (
+        <View style={styles.heroStripe}>
+          <HazardStripe color={c.onFill} height={8} />
+        </View>
+      ) : null}
       {sideLabel ? (
         <View style={[styles.sideTag, { borderColor: c.onFill }]}>
           <AppText variant="label" color={c.onFill}>
@@ -59,11 +65,12 @@ export function VerdictHero({ vm, sideLabel }: { vm: VerdictViewModel; sideLabel
 }
 
 const styles = StyleSheet.create({
-  hero: { borderRadius: radius.xl, padding: space.xl - 4, gap: space.xs },
+  hero: { overflow: "hidden", borderRadius: radius.xl, padding: space.xl - 4, gap: space.xs },
   statusRow: { flexDirection: "row", alignItems: "center", gap: space.md, marginBottom: space.xs },
   iconDisc: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center" },
   statusText: { flex: 1 },
   word: { fontSize: 50, lineHeight: 54, fontWeight: "900", letterSpacing: -1 },
+  heroStripe: { marginHorizontal: -(space.xl - 4), marginTop: -(space.xl - 4), marginBottom: space.sm, overflow: "hidden" },
   sideTag: { alignSelf: "flex-start", borderWidth: 1.5, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 4 },
   wordLong: { fontSize: 34, lineHeight: 40, letterSpacing: -0.5 },
   qualifier: { opacity: 0.95, marginTop: -2 },
