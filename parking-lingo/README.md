@@ -57,15 +57,20 @@ restriction might be in force.
 - **Timed parking** (`1/4P`, `1P`, `2P`, plain `P`): applies only inside its times. A stay may run
   past the end of the window ("2P ends 6:00 pm — no limit after that"). Arriving before the
   window, the limit counts from window start. Back-to-back limited windows keep counting from
-  arrival (conservative).
+  arrival (conservative); if you'd already be over a stricter limit when it starts, you must move
+  by its start ("Move by 12:00 pm — 1/4P limit starts").
 - **Zones** (loading, bus, taxi, mail, works, truck, motorbike, car share, EV): treated as
   no-stopping for vehicles they aren't for. Loading zones are allowed only for `commercial` /
   `truck` vehicles, with a default 30-minute limit when none is printed (ARR r.179); some states
   let other vehicles load briefly — we warn instead of allowing.
 - **Vehicle wording**: `allowedVehicles` (structured, "X only") or, failing that, "… only" text in
-  `vehicleRestriction`. Not your vehicle → `no`; "only" wording we can't interpret → `unsure`.
-  Any vehicle note ("Buses excepted") is shown in the summary and caps the answer at
-  `yes_with_conditions`.
+  `vehicleRestriction`. The text fallback only accepts exact phrases ("Cars only", "Motor cars
+  only", "Motor vehicles only", "Motor cycles only", "Buses only", "Taxis only", "Goods vehicles
+  only"…); anything with "authorised" is authorised-only; anything else ("Police cars only", "Car
+  share vehicles only", "Hire cars only", "Doctors only") is unclear → `unsure`. With "… only
+  except …" the "only" clause decides. Structured `["other"]` → `unsure` unless your class is also
+  listed. Not your vehicle → `no`. Any vehicle note ("Buses excepted") is shown in the summary and
+  caps the answer at `yes_with_conditions`.
 - **Disability parking**: only with a disability permit. State concessions (e.g. extra time on
   timed signs for permit holders — rules differ by state) are *not* applied.
 - **Permit holders excepted**: only on parking-type panels (timed parking, No Parking that says so,
@@ -81,13 +86,18 @@ restriction might be in force.
 - **Temporary signs** take part in "most restrictive wins", so a temporary prohibition overrides
   the permanent sign, but a temporary *permission* never overrides a permanent prohibition.
   - No legible dates → in force + warning.
-  - Doubtful dates → in force + "dates on the temporary sign are unclear — check the sign":
-    an invalid calendar date, end before start, or a range that would be in force now if either
-    endpoint's year were off by one (e.g. "28 Dec – 3 Jan" resolved to the wrong year; shifted
-    ranges longer than 120 days are not considered).
-  - A date-only end includes every schedule window that *starts* on or before that date, run to
-    its natural end (a 10pm–6am window on the last night still covers 2 am the next morning).
-  - Dates clearly in the past → not applied, but warned and never a plain `yes`.
+  - Doubtful dates on a temporary *prohibition* → `unsure` ("A temporary sign's dates are unclear
+    — read it before parking", shortLabel "Check temporary sign"), unless a permanent panel
+    already says no. Doubtful = an invalid calendar date, end before start, or dates that would
+    put the sign in force now if a year were off by one: either endpoint of a two-sided range
+    (shifted range ≤ 120 days), or the only date of a one-sided "from …"/"until …" (shifted date
+    within 120 days of now). The 120-day bound is deliberate: without it every dated sign within a
+    year of today (e.g. next Monday's roadworks) would count as doubtful.
+  - Cleanly past or future (not in force under any plausible shift) → not applied now, but never a
+    plain `yes`; the sign and its dates are stated in the summary.
+  - A date-only start counts only windows that *start* on or after that date; a date-only end
+    includes every window that starts on or before it, to its natural end (a 10pm–6am window on
+    the last night still covers 2 am the next morning; the night before the start date doesn't).
   - Dated future signs are listed in `upcomingTemporary`.
 - **Public holidays** (architect decision): signed restrictions **apply on public holidays unless
   the sign says otherwise** — the rule in NSW and the safe reading everywhere. A schedule marked
@@ -95,7 +105,11 @@ restriction might be in force.
   holidays") also applies on holidays; *unspecified* is never lifted (a soft note says sign times
   still apply — some councils differ). When holiday status can't be determined the restrictive
   reading is used for both included and excluded schedules, and a warning is shown only if the
-  answer would differ.
+  answer would differ. A restriction lifted only because the built-in calendar says it's a holiday
+  (not the user) is capped at `yes_with_conditions` with "Lifted today — <holiday>. Check the
+  sign." An "incl. public holidays" panel that isn't in force now adds a regional-holiday caveat
+  and caps a plain yes (the calendar can't know local holidays). The user's `isPublicHoliday:
+  false` never switches off an "incl. public holidays" schedule on a calendar holiday.
 - **Confidence**: overall/panel confidence < 0.5 → `unsure`; < 0.75 → never `yes`
   (a `no` is kept, with a warning). `other` panel kinds and overlapping conflicting time
   limits → `unsure`.
@@ -107,11 +121,15 @@ restriction might be in force.
 ## Public holiday calendar (`src/holidays.ts`)
 
 `australianPublicHolidays(year, "AU-NSW")`, `isPublicHolidayOn(date, jurisdiction)` compute
-holidays by rule for any year. `evaluate` uses the calendar when `context.isPublicHoliday` isn't a
-boolean, with the jurisdiction from `context.jurisdiction`, else `reading.jurisdictionHint`, else
-the time zone (Sydney → NSW, Melbourne → VIC, Brisbane → QLD, Adelaide → SA, Perth → WA,
-Hobart → TAS, Darwin → NT; Sydney is safe for the ACT because every NSW-wide holiday is also an
-ACT holiday). With no jurisdiction, every day's status is unknown.
+holidays by rule for any year; the answer is three-valued (`true` / `false` / `"unknown"`).
+`evaluate` uses the calendar when `context.isPublicHoliday` isn't a boolean. Jurisdiction
+(`resolveJurisdictions`): an explicit `context.jurisdiction` wins; the reading's
+`jurisdictionHint` is trusted only if it agrees with the time zone (or the zone maps to nothing);
+otherwise the zone's candidates are used — `Australia/Sydney` = NSW + ACT, Broken Hill / Lord Howe
+= NSW, Eucla = WA + SA, Melbourne = VIC, … A day is a holiday only if every candidate agrees,
+otherwise "unknown" (e.g. Canberra Day when the ACT was only guessed from the Sydney zone). A
+hint that conflicts with the zone makes every disagreeing day "unknown". With no jurisdiction,
+every day is unknown. `Verdict.jurisdictionSource` says which path was taken.
 
 Included: New Year's Day, Australia Day (Monday substitute when on a weekend), Good Friday,
 Easter Saturday (not WA/TAS), Easter Sunday (NSW, VIC, QLD, WA, ACT), Easter Monday, Anzac Day
@@ -121,11 +139,16 @@ June; QLD 1st Monday October), Adelaide Cup (SA), WA Day, Picnic Day (NT), Canbe
 Reconciliation Day (ACT), Melbourne Cup Day (VIC — metro Melbourne only, so reported as
 "unknown").
 
+Reported as "unknown" (`scope: "uncertain"`): AFL Grand Final Friday candidates (VIC, the Friday
+before the last Saturday in September, from 2015), WA King's Birthday candidates (every Monday
+20 Sep – 7 Oct), and the weekend date of a holiday that also gets a weekday substitute (e.g.
+Boxing Day on a Saturday) — states differ on whether the weekend day itself is a holiday.
+
 Left out deliberately (can't be known or not certain — "not a holiday" means signed restrictions
 apply, so omissions are the conservative direction): regional/local holidays (show days, the
 Ekka, Royal Hobart Regatta, council-substituted Melbourne Cup days), AFL Grand Final Friday (date
-set each year by the AFL fixture), WA King's Birthday (proclaimed each year), Easter Sunday in
-SA/NT/TAS, Anzac Day weekend substitutes outside WA, part-day holidays (Christmas Eve / New
+set each year — only its usual candidate day is "unknown"; a grand final in October is missed),
+Easter Sunday in SA/NT/TAS, Anzac Day weekend substitutes outside WA, part-day holidays (Christmas Eve / New
 Year's Eve evenings in SA and NT), and one-off proclaimed days. SA's Christmas/Proclamation Day
 substitute rules are modelled the same as other states, which may differ in some years. Add
 known local holidays via `context.publicHolidayDates`.

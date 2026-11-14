@@ -57,25 +57,26 @@ describe("C2: doubtful temporary dates", () => {
   it("year mis-resolved across New Year (28 Dec – 3 Jan read as 2026-12-28 → 2026-01-03)", () => {
     const t = panel({ kind: "no_stopping", temporary: true, effectiveDates: { start: "2026-12-28", end: "2026-01-03" } });
     const v = ev([twoP, t], "2026-12-30T10:00:00+11:00");
-    expect(v.status).toBe("no");
-    expect(v.summary).toMatch(/Dates on the temporary sign are unclear — check the sign/);
+    expect(v.status).toBe("unsure");
+    expect(v.shortLabel).toBe("Check temporary sign");
+    expect(v.summary).toBe("A temporary sign's dates are unclear — read it before parking.");
   });
 
-  it("range one year off (2025-12-28 → 2026-01-03, now 30 Dec 2026) is treated as in force", () => {
+  it("range one year off (2025-12-28 → 2026-01-03, now 30 Dec 2026) -> unsure", () => {
     const t = panel({ kind: "no_stopping", temporary: true, effectiveDates: { start: "2025-12-28", end: "2026-01-03" } });
     const v = ev([twoP, t], "2026-12-30T10:00:00+11:00");
-    expect(v.status).toBe("no");
+    expect(v.status).toBe("unsure");
     expect(words(v)).toMatch(/year on the sign may have been misread/);
   });
 
-  it("end before start (both future) is in force, not ignored", () => {
+  it("end before start (both future) is never ignored -> unsure", () => {
     const t = panel({ kind: "no_stopping", temporary: true, effectiveDates: { start: "2026-11-20", end: "2026-11-14" } });
-    expect(ev([t], N).status).toBe("no");
+    expect(ev([t], N).status).toBe("unsure");
   });
 
-  it("invalid calendar date is in force", () => {
+  it("invalid calendar date -> unsure", () => {
     const t = panel({ kind: "no_stopping", temporary: true, effectiveDates: { start: "2026-11-30", end: "2026-11-31" } });
-    expect(ev([t], "2026-12-01T10:00:00+11:00").status).toBe("no");
+    expect(ev([t], "2026-12-01T10:00:00+11:00").status).toBe("unsure");
   });
 
   it("a plainly expired sign (ended yesterday) isn't year-ambiguous and isn't a plain yes", () => {

@@ -148,6 +148,13 @@ export interface Verdict extends SideVerdict {
   needsSide: boolean;
   /** Jurisdiction used for the holiday calendar, e.g. "AU-NSW" (null if unknown). */
   jurisdiction: string | null;
+  /**
+   * Where `jurisdiction` came from: "context" (explicit), "reading" (the sign's hint, agreeing
+   * with the time zone), "time_zone" (inferred; may cover several, e.g. NSW + ACT), "conflict"
+   * (the sign's hint disagrees with the time zone: holiday status is unknown where they differ),
+   * or null.
+   */
+  jurisdictionSource: "context" | "reading" | "time_zone" | "conflict" | null;
   /** Whether today is a public holiday as used by the engine. */
   publicHolidayToday: boolean | "unknown";
   /** Name of today's public holiday from the calendar, if any. */

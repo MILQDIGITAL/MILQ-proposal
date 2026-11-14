@@ -75,6 +75,14 @@ describe("S4: prompt guidance", () => {
   });
 });
 
+describe("round 2 prompt guidance", () => {
+  it("fills both effectiveDates and uses ['other'] for unmappable 'only' wording", () => {
+    expect(SYSTEM_PROMPT).toMatch(/When both a start and an end are printed, ALWAYS fill both/);
+    expect(SYSTEM_PROMPT).toMatch(/Police cars only.*\["other"\]/s);
+    expect(SYSTEM_PROMPT).toMatch(/"Authorised cars only" is \["authorised"\]/);
+  });
+});
+
 describe("mock demo context (x-mock-demo-time)", () => {
   const mockApp = () => makeApp(new MockSignReader(), { mockVision: true });
 

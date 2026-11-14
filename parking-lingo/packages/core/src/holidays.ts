@@ -8,12 +8,21 @@
  *    stays conservative.
  *  - Regional/local holidays (show days, Royal Hobart Regatta, the Ekka in
  *    Brisbane, council-substituted days) can't be known and are not listed.
- *  - Days proclaimed ad hoc (e.g. AFL Grand Final Friday in VIC, the WA King's
- *    Birthday, national days of mourning) are not listed.
+ *  - Days whose date is proclaimed each year are listed as `uncertain` candidates:
+ *    AFL Grand Final Friday (VIC: the Friday before the last Saturday in
+ *    September) and the WA King's Birthday (Mondays 20 Sep – 7 Oct). National
+ *    days of mourning can't be predicted.
+ *  - The weekend date of a holiday that also gets a Monday/Tuesday substitute
+ *    (e.g. Boxing Day on a Saturday) is `uncertain`: states differ on whether
+ *    the weekend day itself is still a public holiday.
+ *  - `isPublicHolidayOn` reports `partial` and `uncertain` days as "unknown",
+ *    and the engine then takes the restrictive reading for both "except public
+ *    holidays" and "incl. public holidays" schedules.
  *  - Part-day holidays (Christmas Eve / New Year's Eve from 7 pm in SA and NT)
  *    are not listed.
- *  - Where a rule is uncertain we leave the day OUT. For parking that is the
- *    conservative direction: "not a holiday" means signed restrictions apply.
+ *  - Days not listed are reported as "not a holiday". That is conservative for
+ *    "except public holidays" schedules but NOT for "incl. public holidays"
+ *    ones, so the engine adds a regional-holiday caveat for those.
  */
 import { addDays, dateKey, dayOfWeek, type LocalDate } from "./time";
 
@@ -33,8 +42,13 @@ export interface PublicHoliday {
   /** Local date 'YYYY-MM-DD'. */
   date: string;
   name: string;
-  /** 'partial' = only part of the jurisdiction observes it (e.g. metro Melbourne). */
-  scope: "statewide" | "partial";
+  /**
+   * 'statewide' = a public holiday across the jurisdiction.
+   * 'partial' = only part of the jurisdiction observes it (e.g. metro Melbourne).
+   * 'uncertain' = may or may not be a holiday (date proclaimed each year, or the
+   * weekend date of a holiday that has a weekday substitute).
+   */
+  scope: "statewide" | "partial" | "uncertain";
   /** True for an additional/substitute day given because the holiday fell on a weekend. */
   substitute: boolean;
 }
@@ -96,6 +110,41 @@ export function jurisdictionFromTimeZone(timeZone: string): AustralianJurisdicti
   return map[timeZone] ?? null;
 }
 
+/**
+ * Every jurisdiction that may use an IANA zone (for holiday purposes). The
+ * engine treats a day as a holiday only if all candidates agree, otherwise
+ * "unknown". Australia/Sydney covers NSW and the ACT; Broken Hill and Lord Howe
+ * are NSW; Eucla is used across the WA/SA border.
+ */
+export function jurisdictionsFromTimeZone(timeZone: string): AustralianJurisdiction[] {
+  const map: Record<string, AustralianJurisdiction[]> = {
+    "Australia/Sydney": ["AU-NSW", "AU-ACT"],
+    "Australia/NSW": ["AU-NSW", "AU-ACT"],
+    "Australia/ACT": ["AU-ACT"],
+    "Australia/Canberra": ["AU-ACT"],
+    "Australia/Broken_Hill": ["AU-NSW"],
+    "Australia/Yancowinna": ["AU-NSW"],
+    "Australia/Lord_Howe": ["AU-NSW"],
+    "Australia/LHI": ["AU-NSW"],
+    "Australia/Melbourne": ["AU-VIC"],
+    "Australia/Victoria": ["AU-VIC"],
+    "Australia/Brisbane": ["AU-QLD"],
+    "Australia/Queensland": ["AU-QLD"],
+    "Australia/Lindeman": ["AU-QLD"],
+    "Australia/Adelaide": ["AU-SA"],
+    "Australia/South": ["AU-SA"],
+    "Australia/Perth": ["AU-WA"],
+    "Australia/West": ["AU-WA"],
+    "Australia/Eucla": ["AU-WA", "AU-SA"],
+    "Australia/Hobart": ["AU-TAS"],
+    "Australia/Tasmania": ["AU-TAS"],
+    "Australia/Currie": ["AU-TAS"],
+    "Australia/Darwin": ["AU-NT"],
+    "Australia/North": ["AU-NT"],
+  };
+  return map[timeZone] ?? [];
+}
+
 /** Easter Sunday (Gregorian, anonymous algorithm). */
 export function easterSunday(year: number): LocalDate {
   const a = year % 19;
@@ -151,8 +200,9 @@ export function australianPublicHolidays(year: number, jurisdiction: string): Pu
   /** Holiday on a fixed date; if it falls on Sat/Sun the following Monday is added. */
   const fixedWithMondaySub = (month: number, day: number, name: string) => {
     const d = { year, month, day };
-    add(d, name);
     const w = dowIndex(d);
+    const weekend = w === 6 || w === 0;
+    add(d, name, false, weekend ? "uncertain" : "statewide");
     if (w === 6) add(addDays(d, 2), `${name} (additional day)`, true);
     if (w === 0) add(addDays(d, 1), `${name} (additional day)`, true);
   };
@@ -172,17 +222,19 @@ export function australianPublicHolidays(year: number, jurisdiction: string): Pu
   // Anzac Day: 25 April everywhere. Only WA's weekend substitute (following Monday) is
   // included; other states' Sunday rules vary and are left out (conservative).
   const anzac = { year, month: 4, day: 25 };
-  add(anzac, "Anzac Day");
-  if (j === "AU-WA" && (dowIndex(anzac) === 6 || dowIndex(anzac) === 0)) {
+  const anzacWeekend = dowIndex(anzac) === 6 || dowIndex(anzac) === 0;
+  add(anzac, "Anzac Day", false, j === "AU-WA" && anzacWeekend ? "uncertain" : "statewide");
+  if (j === "AU-WA" && anzacWeekend) {
     add(onOrAfter(anzac, MON), "Anzac Day (additional day)", true);
   }
 
   // Christmas Day / Boxing Day with the standard weekend substitutes.
   const xmas = { year, month: 12, day: 25 };
   const boxing = { year, month: 12, day: 26 };
-  add(xmas, "Christmas Day");
-  add(boxing, j === "AU-SA" ? "Proclamation Day" : "Boxing Day");
   const xw = dowIndex(xmas);
+  const bw = dowIndex(boxing);
+  add(xmas, "Christmas Day", false, xw === 6 || xw === 0 ? "uncertain" : "statewide");
+  add(boxing, j === "AU-SA" ? "Proclamation Day" : "Boxing Day", false, bw === 6 || bw === 0 ? "uncertain" : "statewide");
   if (xw === 5) add(addDays(boxing, 2), "Boxing Day (additional day)", true); // Fri/Sat -> Mon 28
   if (xw === 6) {
     add(addDays(xmas, 2), "Christmas Day (additional day)", true); // Mon 27
@@ -214,16 +266,27 @@ export function australianPublicHolidays(year: number, jurisdiction: string): Pu
       break;
   }
 
-  // King's Birthday: 2nd Monday in June, except QLD (1st Monday in October).
-  // WA's date is proclaimed each year (usually late Sept) — left out.
+  // King's Birthday: 2nd Monday in June, except QLD (1st Monday in October) and WA
+  // (proclaimed each year, usually the last Monday in September): every Monday
+  // from 20 Sep to 7 Oct is an uncertain candidate.
   if (j === "AU-QLD") add(nthWeekday(year, 10, MON, 1), "King's Birthday");
-  else if (j !== "AU-WA") add(nthWeekday(year, 6, MON, 2), "King's Birthday");
+  else if (j === "AU-WA") {
+    for (let d = onOrAfter({ year, month: 9, day: 20 }, MON); d.month === 9 || d.day <= 7; d = addDays(d, 7)) {
+      add(d, "King's Birthday (date proclaimed yearly)", false, "uncertain");
+    }
+  } else add(nthWeekday(year, 6, MON, 2), "King's Birthday");
 
   // State/territory-specific.
   switch (j) {
-    case "AU-VIC":
+    case "AU-VIC": {
       add(nthWeekday(year, 11, TUE, 1), "Melbourne Cup Day", false, "partial");
+      if (year >= 2015) {
+        // Friday before the AFL Grand Final, usually the last Saturday in September.
+        const lastSat = addDays(nthWeekday(year, 10, 6, 1), -7);
+        add(addDays(lastSat, -1), "AFL Grand Final Friday (if proclaimed)", false, "uncertain");
+      }
       break;
+    }
     case "AU-SA":
       add(nthWeekday(year, 3, MON, 2), "Adelaide Cup Day");
       break;
@@ -273,8 +336,8 @@ export function publicHolidaysOn(date: LocalDate | string, jurisdiction: string)
  *  - true: a statewide public holiday
  *  - false: not a statewide holiday as far as this calendar knows (regional
  *    holidays can't be known)
- *  - "unknown": jurisdiction not recognised, or the holiday only applies to
- *    part of the jurisdiction (e.g. Melbourne Cup Day)
+ *  - "unknown": jurisdiction not recognised, or the day is only a holiday in
+ *    part of the jurisdiction (Melbourne Cup Day) or might be one (`uncertain`)
  */
 export function isPublicHolidayOn(date: LocalDate | string, jurisdiction: string | null | undefined): boolean | "unknown" {
   const j = normaliseJurisdiction(jurisdiction);

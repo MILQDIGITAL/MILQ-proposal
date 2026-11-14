@@ -67,11 +67,14 @@ describe("australianPublicHolidays", () => {
     expect(dates(2022, "AU-NSW")).toEqual(expect.arrayContaining(["2022-12-26", "2022-12-27"]));
   });
 
-  it("King's Birthday: 2nd Monday in June, QLD 1st Monday in October, WA not listed", () => {
+  it("King's Birthday: 2nd Monday in June, QLD 1st Monday in October, WA candidates uncertain", () => {
     expect(dates(2026, "AU-NSW")).toContain("2026-06-08");
     expect(dates(2026, "AU-QLD")).toContain("2026-10-05");
     expect(dates(2026, "AU-QLD")).not.toContain("2026-06-08");
-    expect(australianPublicHolidays(2026, "AU-WA").some((h) => h.name.startsWith("King"))).toBe(false);
+    const wa = australianPublicHolidays(2026, "AU-WA").filter((h) => h.name.startsWith("King"));
+    expect(wa.map((h) => h.date)).toEqual(["2026-09-21", "2026-09-28", "2026-10-05"]);
+    expect(wa.every((h) => h.scope === "uncertain")).toBe(true);
+    expect(isPublicHolidayOn("2026-09-28", "AU-WA")).toBe("unknown");
   });
 
   it("Labour Day differs by state", () => {

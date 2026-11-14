@@ -5,9 +5,9 @@ import { BNE, ctx, ev, panel, schedule, twoPMeter, utc, WEEKDAYS, ALL_DAYS } fro
 
 describe("public holidays", () => {
   it("unknown status: restriction applies and the user is warned", () => {
-    // Broken Hill (NSW, but on Adelaide time) has no inferable jurisdiction.
+    // UTC has no inferable jurisdiction.
     const p = twoPMeter([schedule(WEEKDAYS, "08:00", "18:00", "excluded")]);
-    const v = ev([p], "2026-11-12T09:30:00+10:30", { isPublicHoliday: "unknown", timeZone: "Australia/Broken_Hill" });
+    const v = ev([p], "2026-11-12T09:30:00Z", { isPublicHoliday: "unknown", timeZone: "UTC" });
     expect(v.maxStayMinutes).toBe(120);
     expect(v.warnings.join(" ")).toMatch(/Not sure if today is a public holiday/);
   });
